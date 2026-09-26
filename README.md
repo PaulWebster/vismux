@@ -5,10 +5,6 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 ## Table of Contents
 
 - [Features](#features)
-- [Environment Preparation & Compilation](#environment-preparation--compilation)
-	- [Host Option A: Compiling on a 64-bit Intel/AMD Workstation (Ubuntu / Debian)](#host-option-a-compiling-on-a-64-bit-intelamd-workstation-ubuntu--debian)
-	- [Host Option B: Compiling on a 64-bit Raspberry Pi Host (Raspberry Pi OS 64-bit)](#host-option-b-compiling-on-a-64-bit-raspberry-pi-host-raspberry-pi-os-64-bit)
-	- [Compilation Commands Matrix](#compilation-commands-matrix)
 - [Service Discovery Mode](#service-discovery-mode)
 	- [Scanning the Subnet](#scanning-the-subnet)
 	- [Discovery Output Format](#discovery-output-format)
@@ -23,6 +19,10 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 	- [Deploying and Activating the Units](#3-deploying-and-activating-the-units)
 - [Logging & Diagnostics](#logging--diagnostics)
 - [Systemd Automation](#systemd-automation)
+- [Environment Preparation & Compilation](#environment-preparation--compilation)
+	- [Host Option A: Compiling on a 64-bit Intel/AMD Workstation (Ubuntu / Debian)](#host-option-a-compiling-on-a-64-bit-intelamd-workstation-ubuntu--debian)
+	- [Host Option B: Compiling on a 64-bit Raspberry Pi Host (Raspberry Pi OS 64-bit)](#host-option-b-compiling-on-a-64-bit-raspberry-pi-host-raspberry-pi-os-64-bit)
+	- [Compilation Commands Matrix](#compilation-commands-matrix)
 
 ## Features
 
