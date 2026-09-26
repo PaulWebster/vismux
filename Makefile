@@ -1,0 +1,64 @@
+CC = gcc
+LIBS = -lrt
+
+# Shared compilation parameters across all hardware environments
+CFLAGS_COMMON = -Wall -Wextra -O3 -pthread -D_FILE_OFFSET_BITS=64
+
+# Target-Specific Variable Extensions
+CFLAGS_NAT     = 
+CFLAGS_INTEL64 = 
+CFLAGS_INTEL32 = -m32
+
+# ARM Cross-Compilers & Architecture Tuning Flags
+# (Requires: sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu)
+ARM64_CC      = aarch64-linux-gnu-gcc
+ARM32_CC      = arm-linux-gnueabihf-gcc
+CFLAGS_ARM64  = -march=armv8-a
+CFLAGS_ARMHF  = -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard
+CFLAGS_ARMV6  = -march=armv6 -marm -mfpu=vfp -mfloat-abi=hard
+
+# Explicitly Defined Architectural Output Signatures
+TARGET_NATIVE  = vismux
+TARGET_X86_64  = vismux-x86_64
+TARGET_X86_32  = vismux-x86-32
+TARGET_ARM64   = vismux-aarch64
+TARGET_ARMHF   = vismux-armhf
+TARGET_ARMV6   = vismux-armv6
+
+.PHONY: all clean native x86_64 x86-32 aarch64 armhf armv6
+
+# Running a bare 'make' compiles the host's native setup
+all: native
+
+# 1. Native Shorthand Target (Matches current host CPU architecture layout)
+native: vismux.c
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $< -o $(TARGET_NATIVE) $(LIBS)
+	@echo "[+] Compiled local native binary: $(TARGET_NATIVE)"
+
+# 2. Intel/AMD 64-bit Explicit Target
+x86_64: vismux.c
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL64) $< -o $(TARGET_X86_64) $(LIBS)
+	@echo "[+] Compiled Intel/AMD 64-bit binary: $(TARGET_X86_64)"
+
+# 3. Intel x86 32-bit Target
+x86-32: vismux.c
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL32) $< -o $(TARGET_X86_32) $(LIBS)
+	@echo "[+] Compiled Intel 32-bit binary: $(TARGET_X86_32)"
+
+# 4. ARM 64-bit Explicit Target (Raspberry Pi 3/4/5 running 64-bit OS)
+aarch64: vismux.c
+	$(ARM64_CC) $(CFLAGS_COMMON) $(CFLAGS_ARM64) $< -o $(TARGET_ARM64) $(LIBS)
+	@echo "[+] Cross-compiled ARM 64-bit (AArch64) binary: $(TARGET_ARM64)"
+
+# 5. ARMhf 32-bit Target (Raspberry Pi 2/3/4 running legacy 32-bit OS)
+armhf: vismux.c
+	$(ARM32_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMHF) $< -o $(TARGET_ARMHF) $(LIBS)
+	@echo "[+] Cross-compiled ARMhf (v7) binary: $(TARGET_ARMHF)"
+
+# 6. ARMv6 32-bit Target (Raspberry Pi 1 & Raspberry Pi Zero Classic)
+armv6: vismux.c
+	$(ARM32_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMV6) $< -o $(TARGET_ARMV6) $(LIBS)
+	@echo "[+] Cross-compiled ARMv6 (Pi Zero/1) binary: $(TARGET_ARMV6)"
+
+clean:
+	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6)

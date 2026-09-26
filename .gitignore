@@ -1,0 +1,16 @@
+# === Build Artifacts ===
+vismux
+*.o
+*.so
+*.a
+
+# === System & Editor Files ===
+.DS_Store
+Thmubs.db
+*~
+*.swp
+*.swo
+
+# === Diagnostic & Test Outputs ===
+*.log
+vgcore.*

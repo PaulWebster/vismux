@@ -1,0 +1,16 @@
+[Unit]
+Description=Squeezelite Visualiser Replicator Destination Service
+# Blocks boot until the client is fully connected to the local network
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ExecStart targets the source server and builds the local replica SHM securely
+ExecStart=/usr/local/bin/vismux --destination --server 192.168.1.50 --mac b8:27:eb:01:02:03 --log-level 0
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

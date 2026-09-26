@@ -1,0 +1,106 @@
+name: Continuous Integration Build Test
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Cross-Compile and Verify Architectures
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
+      run: |
+        sudo apt-get update
+        # gcc-multilib enables x86-32 (-m32) compiles
+        # gcc-arm-linux-gnueabihf targets armhf and armv6 cross-compilation
+        # gcc-aarch64-linux-gnu targets arm64 cross-compilation
+        sudo apt-get install -y build-essential libc6-dev gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+
+    - name: Verify Native Architecture Binary Compilation
+      run: |
+        make native
+
+    - name: Verify Explicit Intel/AMD 64-bit Binary Compilation
+      run: |
+        make x86_64
+
+    - name: Verify Explicit Intel x86 32-bit Binary Compilation
+      run: |
+        make x86-32
+
+    - name: Verify Cross-Compiled ARM 64-bit (AArch64) Binary Compilation
+      run: |
+        make aarch64
+
+    - name: Verify Cross-Compiled ARMhf (v7) 32-bit Binary Compilation
+      run: |
+        make armhf
+
+    - name: Verify Cross-Compiled ARMv6 (Pi Zero/1) 32-bit Binary Compilation
+      run: |
+        make armv6
+
+    - name: Verify Binary Headers using Kernel File Inspector
+      run: |
+        # Logs binary header properties to confirm layout separation
+        file vismux
+        file vismux-x86_64
+        file vismux-x86-32
+        file vismux-aarch64
+        file vismux-armhf
+        file vismux-armv6
+
+    - name: Verify Executable Execution Bounds (Intel Platforms Only)
+      run: |
+        # Validates that native x86-compatible targets boot cleanly in this runner
+        ./vismux --version
+        ./vismux-x86_64 --version
+        ./vismux-x86-32 --version
+
+  release:
+    name: Publish Release Assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out tagged source
+      uses: actions/checkout@v4
+
+    - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libc6-dev gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+
+    - name: Build release binaries
+      run: |
+        make native x86_64 x86-32 aarch64 armhf armv6
+
+    - name: Package release assets
+      run: |
+        mkdir -p release
+        for target in native x86_64 x86-32 aarch64 armhf armv6; do
+          case "$target" in
+            native) binary="vismux" ;;
+            *) binary="vismux-$target" ;;
+          esac
+          archive="vismux-${GITHUB_REF_NAME}-${target}.tar.gz"
+          tar -czf "release/$archive" "$binary" README.md systemd
+        done
+        sha256sum release/* > release/SHA256SUMS
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        generate_release_notes: true
+        files: release/*
