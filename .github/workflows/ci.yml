@@ -12,12 +12,12 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Cross-Compile and Verify Architectures
+  build-and-release:
+    name: Cross-Compile, Verify and Optionally Release
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out repository code
+    - name: Checkout Code and Local Toolchain
       uses: actions/checkout@v4
 
     - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
@@ -43,9 +43,8 @@ jobs:
         
         # For cross-compile to armv6 (Raspberry Pi B and Raspberry Pi Zero in particular)
         # outside of GitHub Actions because it is blocked ... wget https://musl.cc/armv6-linux-musleabihf-cross.tgz -o tools/musl.cc/armv6-linux-musleabihf-cross.tgz
-        cd tools
-        tar -xzf armv6-linux-musleabihf-cross.tgz
-        echo "$(pwd)/armv6-linux-musleabihf-cross/bin" >> $GITHUB_PATH
+        tar -xzf armv6-linux-musleabihf-cross.tgz -C tools/
+        echo "$GITHUB_WORKSPACE/tools/armv6-linux-musleabihf-cross/bin" >> $GITHUB_PATH
 
     - name: Verify Native Architecture Binary Compilation
       run: |
@@ -88,36 +87,9 @@ jobs:
         ./vismux-x86_64 --version
         ./vismux-x86-32 --version
 
-  release:
-    name: Publish Release Assets
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Check out tagged source
-      uses: actions/checkout@v4
-
-    - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
-      run: |
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          libc6-dev \
-          gcc-i686-linux-gnu \
-          gcc-arm-linux-gnueabihf \
-          gcc-aarch64-linux-gnu \
-          gcc-multilib- \
-          libc6-dev-i386 \
-          gcc-13-multilib-
-          
-        # Create explicit symlinks to guarantee 32-bit x86 compilation path works without gcc-multilib
-        sudo ln -sf /usr/include/x86_64-linux-gnu/asm /usr/include/asm
-
-    - name: Build release binaries
-      run: |
-        make native x86_64 x86-32 aarch64 armhf armv6
-
+    # =========================================================================
+    # PACKAGING PHASE (Runs every time so you can download and test archives)
+    # =========================================================================
     - name: Package release assets
       run: |
         mkdir -p release
@@ -131,8 +103,21 @@ jobs:
         done
         sha256sum release/* > release/SHA256SUMS
 
-    - name: Create GitHub Release
+    - name: Upload Testing Artifacts to Web UI
+      uses: actions/upload-artifact@v4
+      with:
+        name: vismux-packaged-archives
+        path: release/
+        retention-days: 5
+
+    # =========================================================================
+    # RELEASE PHASE (Only executes when pushing a tag like v1.0.0)
+    # =========================================================================
+    - name: Create GitHub Release and Upload Assets
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
         generate_release_notes: true
         files: release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
