@@ -2,7 +2,7 @@ name: Continuous Integration Build Test
 
 on:
   push:
-    branches: [ main, master, prerelease1 ]
+    branches: [ main, master ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
