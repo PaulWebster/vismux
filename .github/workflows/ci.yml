@@ -93,8 +93,20 @@ jobs:
 
     - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
       run: |
+        sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install -y build-essential libc6-dev gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+        sudo apt-get install -y \
+          build-essential \
+          libc6-dev \
+          gcc-i686-linux-gnu \
+          gcc-arm-linux-gnueabihf \
+          gcc-aarch64-linux-gnu \
+          gcc-multilib- \
+          libc6-dev-i386 \
+          gcc-13-multilib-
+          
+        # Create explicit symlinks to guarantee 32-bit x86 compilation path works without gcc-multilib
+        sudo ln -sf /usr/include/x86_64-linux-gnu/asm /usr/include/asm
 
     - name: Build release binaries
       run: |
