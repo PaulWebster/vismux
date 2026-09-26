@@ -21,11 +21,23 @@ jobs:
 
     - name: Install Multi-Architecture Cross-Compilers and POSIX Libraries
       run: |
+        # Enable the 32-bit x86 (i386) architecture pool
+        sudo dpkg --add-architecture i386
         sudo apt-get update
-        # gcc-multilib enables x86-32 (-m32) compiles
+        # exclude gcc-multilib - usually required for x86-32 (-m32) compiles but causes dependency conflict
         # gcc-arm-linux-gnueabihf targets armhf and armv6 cross-compilation
         # gcc-aarch64-linux-gnu targets arm64 cross-compilation
-        sudo apt-get install -y build-essential libc6-dev gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+        sudo apt-get install -y \
+          build-essential \
+          libc6-dev \
+          gcc-arm-linux-gnueabihf \
+          gcc-aarch64-linux-gnu \
+          gcc-multilib- \
+          libc6-dev-i386 \
+          gcc-13-multilib-
+          
+        # Create explicit symlinks to guarantee 32-bit x86 compilation path works without gcc-multilib
+        sudo ln -sf /usr/include/x86_64-linux-gnu/asm /usr/include/asm
 
     - name: Verify Native Architecture Binary Compilation
       run: |
