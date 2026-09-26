@@ -46,6 +46,8 @@
 #include <termios.h>
 #include <dirent.h>
 
+#include <elf.h>
+#define VENDOR_STR "VISMUX"
 #define APP_VERSION "0.0.9j"
 
 #define VIS_BUF_SIZE 16384
@@ -66,6 +68,26 @@
 #define DEFAULT_MAC_TIMEOUT 2
 #define SQUEEZELITE_SHM_PREFIX "squeezelite-"
 #define SQUEEZELITE_SHM_PREFIX_LEN (sizeof(SQUEEZELITE_SHM_PREFIX) - 1)
+
+// Define a structured layout matching an official ELF note entry
+struct elf_version_note {
+    Elf64_Word namesz;   // Size of the vendor name string
+    Elf64_Word descsz;   // Size of the description version string
+    Elf64_Word type;     // Note type specifier
+    char name[((sizeof(VENDOR_STR) + 3) & ~3)]; // Dynamically padded to 4-byte boundary
+    char desc[((sizeof(APP_VERSION) + 3) & ~3)]; // Dynamically padded to 4-byte boundary
+};
+
+// Embed the version string explicitly inside the .note section allocation
+__attribute__((used, section(".note.vismux.version"), aligned(4)))
+static const struct elf_version_note app_version = {
+    .namesz = sizeof(((struct elf_version_note *)0)->name),
+    .descsz = sizeof(((struct elf_version_note *)0)->desc),
+    .type = NT_VERSION,
+    .name = "VISMUX",
+    .desc = APP_VERSION
+};
+
 
 volatile sig_atomic_t keep_running = 1;
 int log_level = 2;
@@ -1104,7 +1126,7 @@ int main(int argc, char *argv[])
             keep_shm = false;
         else if (strcmp(argv[i], "--stats-int") == 0 && i + 1 < argc)
             stats_int = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--version") == 0)
+        else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0)
         {
             printf("vismux version %s\n", APP_VERSION);
             return 0; // Clean exit immediately
@@ -1115,8 +1137,9 @@ int main(int argc, char *argv[])
             printf("  Source Mode:      %s --source [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
             printf("  Destination Mode: %s --destination --server <source_ip> [--mac <mac_address>] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n\n", argv[0]);
             printf("  Discovery Mode:   %s --discover [--discover-timeout <sec>] [--discover-port <p>\n\n", argv[0]);
-            printf("Global Flags:\n  -h, --help        Display this help message\n");
-            printf("  --version         Display application version details\n");
+            printf("Global Flags:\n");
+			printf("  -h, --help        Display this help message\n");
+            printf("  -v, --version     Display application version details\n");
             printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
             printf("Interactive Controls (does not require Enter):\n");
             printf("  Press 'v'         Version - Display application version details\n");

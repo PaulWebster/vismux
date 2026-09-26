@@ -74,7 +74,7 @@ If you omit the --mac parameter then `vismux` will use the MAC address that the 
 
 ### Global Configuration Flags
 - `-h, --help`          Display the help manual with usage instructions.
-- `--version`           Display application version details.
+- `-v, --version        Display application version details.
 - `--port <p>`          Override the operational UDP data streaming port (default **`23483`**).
 - `--wait-for-shm`      *(Source Only)* If no Squeezelite visualizer segment is found, keep polling `/dev/shm` until one appears. Without this option, source mode exits with an error.
 - `--mac-timeout <sec>` *(Destination Only)* Time to wait for a valid source MAC before rotating the subscription port (default **`2`** seconds).

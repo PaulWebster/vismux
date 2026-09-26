@@ -99,7 +99,7 @@ jobs:
             *) binary="vismux-$target" ;;
           esac
           archive="vismux-${GITHUB_REF_NAME}-${target}.tar.gz"
-          tar -czf "release/$archive" "$binary" README.md systemd
+          tar -czf "release/$archive" "$binary" README.md LICENSE systemd
         done
         sha256sum release/* > release/SHA256SUMS
 
