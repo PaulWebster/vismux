@@ -45,11 +45,11 @@ You need to run one or more `vismux` in Source mode on a system that runs `Squee
 ./vismux --source --mac b8:27:eb:01:02:03 --log-level 2
 ```
 *Note: Defaults to listening for remote client visualizer requests on UDP port **`23483`**.*
-The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for Squeezelite visualizer segments.
-If exactly one is found, it is selected automatically.
-If multiple are found, `vismux` lists them and exits so the intended player can be selected with `--mac`.
-Squeezelite must be run with the visualiser enabled (-v command line parameter).
-This can be checked by listing the available SHM while Squeezelite is running.
+The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for Squeezelite visualizer segments.  
+If exactly one is found, it is selected automatically.  
+If multiple are found, `vismux` lists them and exits so the intended player can be selected with `--mac`.  
+Squeezelite must be run with the visualiser enabled (-v command line parameter).  
+This can be checked by listing the available SHM while Squeezelite is running.  
 
 ```bash
 ls /dev/shm/squeezelite-*
@@ -77,15 +77,17 @@ If you omit the --mac parameter then `vismux` will use the MAC address that the 
 
 ### 3. Downloading and unpacking
 You can build `vismux` from the source code (instructions are below) or you can use a pre-built binary.
+
 Pick the correct architecture for your system:
-Intel/AMD 64-bit - x86_64
-Intel x86 32-bit - x86_32
-ARM 64-bit (examples - Raspberry Pi 3/4/5 running 64-bit OS) - aarch64
-ARMhf 32-bit (examples - Raspberry Pi 2/3/4/Zero 2 running 32-bit OS) - armhf
-ARMv6 32-bit (examples - Raspberry Pi 1 & Raspberry Pi Zero Classic) - armv6
+Intel/AMD 64-bit - x86_64  
+Intel x86 32-bit - x86_32  
+ARM 64-bit (examples - Raspberry Pi 3/4/5 running 64-bit OS) - aarch64  
+ARMhf 32-bit (examples - Raspberry Pi 2/3/4/Zero 2 running 32-bit OS) - armhf  
+ARMv6 32-bit (examples - Raspberry Pi 1 & Raspberry Pi Zero Classic) - armv6  
 
 Collect a release from https://github.com/PaulWebster/vismux/releases
-for example - to run in Source mode on a Raspberry Pi Zero 2W player you would
+
+for example - to run in Source mode on a Raspberry Pi Zero 2W player you would  
 (replace "version" below with the actual value from the release asset)
 
 ```bash
