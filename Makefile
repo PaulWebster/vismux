@@ -15,6 +15,7 @@ CFLAGS_INTEL32_OLD = -m32
 INTEL32_CC    = i686-linux-gnu-gcc
 ARM64_CC      = aarch64-linux-gnu-gcc
 ARM32_CC      = arm-linux-gnueabihf-gcc
+ARM32V6_CC    = armv6-linux-musleabihf-gcc
 CFLAGS_ARM64  = -march=armv8-a
 CFLAGS_ARMHF  = -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard
 CFLAGS_ARMV6  = -march=armv6 -marm -mfpu=vfp -mfloat-abi=hard
@@ -59,7 +60,7 @@ armhf: vismux.c
 
 # 6. ARMv6 32-bit Target (Raspberry Pi 1 & Raspberry Pi Zero Classic)
 armv6: vismux.c
-	$(ARM32_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMV6) $< -o $(TARGET_ARMV6) $(LIBS)
+	$(ARM32V6_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMV6) $< -o $(TARGET_ARMV6) $(LIBS)
 	@echo "[+] Cross-compiled ARMv6 (Pi Zero/1) binary: $(TARGET_ARMV6)"
 
 clean:

@@ -40,6 +40,12 @@ jobs:
           
         # Create explicit symlinks to guarantee 32-bit x86 compilation path works without gcc-multilib
         sudo ln -sf /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+        
+        # For cross-compile to armv6 (Raspberry Pi B and Raspberry Pi Zero in particular)
+        # outside of GitHub Actions because it is blocked ... wget https://musl.cc/armv6-linux-musleabihf-cross.tgz -o tools/musl.cc/armv6-linux-musleabihf-cross.tgz
+        cd tools
+        tar -xzf armv6-linux-musleabihf-cross.tgz
+        echo "$(pwd)/armv6-linux-musleabihf-cross/bin" >> $GITHUB_PATH
 
     - name: Verify Native Architecture Binary Compilation
       run: |
