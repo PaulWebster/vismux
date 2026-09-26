@@ -1,6 +1,6 @@
 # vismux
 
-A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifically for **Squeezelite** audio visualizer data. It replicates the data over a UDP network pipeline to create SHM in same formwat as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly on a system that is remote from the Squeezelite player.
+A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifically for **Squeezelite** audio visualizer data. It replicates the data over a UDP network pipeline to create SHM in same format as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly on a system that is remote from the Squeezelite player.
 
 ## Table of Contents
 
