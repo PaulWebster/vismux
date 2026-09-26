@@ -8,6 +8,8 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 - [Usage](#usage)
 	- [Source Server Mode (Run on your Squeezelite Host)](#1-source-server-mode-run-on-your-squeezelite-host)
 	- [Destination Client Mode (Run on the Remote Visualizer Node)](#2-destination-client-mode-run-on-the-remote-visualizer-node)
+	- [Downloading and unpacking](#3-downloading-and-unpacking)
+	- [Running on piCorePlayer (pCP)](#4-running-on-picoreplayer-pcp)
 	- [Global Configuration Flags](#global-configuration-flags)
 	- [Interactive Controls](#interactive-controls)
 - [Service Discovery Mode](#service-discovery-mode)
@@ -25,25 +27,27 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 	- [Compilation Commands Matrix](#compilation-commands-matrix)
 
 ## Features
-
+- **Replicate `Squeezelite` visualiser data** (for VU Meters and the like) from a "headless" system to a Linux system with a display
 - **Multi-Client Multiplexing:** A single source engine can push synchronization packets to up to 16 remote destination nodes concurrently.
 - **Pause State Synchronization:** Instantly pushes a silence frame to drop visualizer animations back down to baseline when audio playback pauses and suspends network traffic.
 - **Out-of-Order Jitter Filter:** Automatically drops late UDP packets caused by network congestion.
-- **Protocol Version Lock:** Integrated protocol safety handshakes prevent data corruption or memory faults across mismatched builds.
-- **Decentralised UDP Service Discovery:** Automatic subnet probing maps active nodes.
+- **Decentralised UDP Service Discovery:** Automatic subnet probing maps active `vismux` nodes.
 
 *Note: This does not run on Windows because it does not have the same POSIX Shared Memory support as Linux. It has only been tested on Linux (including piCorePlayer)*
 
 ## Usage
 
 Ensure that you select the correct binary for the platform that you run on. The examples below use `vismux` but it might need to be `vismux-armhf` or similar.
+You need to run one or more `vismux` in Source mode on a system that runs `Squeezelite` plus one or more on a system with a display in Destination mode.
 
 ### 1. Source Server Mode (Run on your Squeezelite Host)
 ```bash
 ./vismux --source --mac b8:27:eb:01:02:03 --log-level 2
 ```
 *Note: Defaults to listening for remote client visualizer requests on UDP port **`23483`**.*
-The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for Squeezelite visualizer segments. If exactly one is found, it is selected automatically. If multiple are found, `vismux` lists them and exits so the intended player can be selected with `--mac`.
+The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for Squeezelite visualizer segments.
+If exactly one is found, it is selected automatically.
+If multiple are found, `vismux` lists them and exits so the intended player can be selected with `--mac`.
 Squeezelite must be run with the visualiser enabled (-v command line parameter).
 This can be checked by listing the available SHM while Squeezelite is running.
 
@@ -70,6 +74,49 @@ Press `q` or `Ctrl+C` to stop waiting. The wait option does not bypass the multi
 If you omit the --mac parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.
 *Note: Jivelite-Vis from after September 2026 is required for this capability.*
 **cava** can be configured to look for any particular Squeezelite MAC address - so in this case the -MAC can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
+
+### 3. Downloading and unpacking
+You can build `vismux` from the source code (instructions are below) or you can use a pre-built binary.
+Pick the correct architecture for your system:
+Intel/AMD 64-bit - x86_64
+Intel x86 32-bit - x86_32
+ARM 64-bit (examples - Raspberry Pi 3/4/5 running 64-bit OS) - aarch64
+ARMhf 32-bit (examples - Raspberry Pi 2/3/4/Zero 2 running 32-bit OS) - armhf
+ARMv6 32-bit (examples - Raspberry Pi 1 & Raspberry Pi Zero Classic) - armv6
+
+Collect a release from https://github.com/PaulWebster/vismux/releases
+for example - to run in Source mode on a Raspberry Pi Zero 2W player you would
+(replace "version" below with the actual value from the release asset)
+
+```bash
+wget https://github.com/PaulWebster/vismux/releases/download/version/vismux-version-armv6.tar.gz
+gunzip vismux-version-armhf.tar.gz
+tar -xvf vismux-version-armhf.tar
+chmod +x vismux-armhf
+./vismux-armhf --version
+```
+You should see a final response similar to:
+```bash
+vismux version 0.0.9j
+```
+If you do not then did you download the correct initial file and replace the word "version" in all of the commands above?
+
+
+### 4. Running on piCorePlayer (pCP)
+Follow the download instructions above.
+The commands line shown above can be included in the pCP Tweaks section to have `vismux` started on boot.
+In that case pick the appropriate binary (vismux-aarch64, vismux-armhf, vismux-armv6) and specify the full path to it.
+
+and then configure, in the pCP Tweaks page, a "User command" of (for a Raspberry Pi Zero 2W player)
+```bash
+/home/tc/vismux-armhf --source --wait-for-shm
+```
+(pick the correct binary name)
+
+If you are updating from an older version where you have already configured the "Tweaks" then you should perform a manual backup to ensure that the update is saved.
+```bash
+pcp br
+```
 
 
 ### Global Configuration Flags
