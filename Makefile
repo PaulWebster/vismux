@@ -7,10 +7,12 @@ CFLAGS_COMMON = -Wall -Wextra -O3 -pthread -D_FILE_OFFSET_BITS=64
 # Target-Specific Variable Extensions
 CFLAGS_NAT     = 
 CFLAGS_INTEL64 = 
-CFLAGS_INTEL32 = -m32
+CFLAGS_INTEL32 = 
+CFLAGS_INTEL32_OLD = -m32
 
 # ARM Cross-Compilers & Architecture Tuning Flags
 # (Requires: sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu)
+INTEL32_CC    = i686-linux-gnu-gcc
 ARM64_CC      = aarch64-linux-gnu-gcc
 ARM32_CC      = arm-linux-gnueabihf-gcc
 CFLAGS_ARM64  = -march=armv8-a
@@ -42,7 +44,7 @@ x86_64: vismux.c
 
 # 3. Intel x86 32-bit Target
 x86-32: vismux.c
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL32) $< -o $(TARGET_X86_32) $(LIBS)
+	$(INTEL32_CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL32) $< -o $(TARGET_X86_32) $(LIBS)
 	@echo "[+] Compiled Intel 32-bit binary: $(TARGET_X86_32)"
 
 # 4. ARM 64-bit Explicit Target (Raspberry Pi 3/4/5 running 64-bit OS)
