@@ -5,14 +5,14 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 ## Table of Contents
 
 - [Features](#features)
-- [Service Discovery Mode](#service-discovery-mode)
-	- [Scanning the Subnet](#scanning-the-subnet)
-	- [Discovery Output Format](#discovery-output-format)
 - [Usage](#usage)
 	- [Source Server Mode (Run on your Squeezelite Host)](#1-source-server-mode-run-on-your-squeezelite-host)
 	- [Destination Client Mode (Run on the Remote Visualizer Node)](#2-destination-client-mode-run-on-the-remote-visualizer-node)
 	- [Global Configuration Flags](#global-configuration-flags)
 	- [Interactive Controls](#interactive-controls)
+- [Service Discovery Mode](#service-discovery-mode)
+	- [Scanning the Subnet](#scanning-the-subnet)
+	- [Discovery Output Format](#discovery-output-format)
 - [Systemd Automation & Customisation](#systemd-automation--customisation)
 	- [Customising the Source Service (`vismux-source.service`)](#1-customising-the-source-service-vismux-sourceservice)
 	- [Customising the Destination Service (`vismux-dest.service`)](#2-customising-the-destination-service-vismux-destservice)
