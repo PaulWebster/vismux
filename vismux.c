@@ -45,6 +45,7 @@
 #include <sys/select.h>
 #include <termios.h>
 #include <dirent.h>
+#include <stdatomic.h>
 
 #include <elf.h>
 #define VENDOR_STR "VISMUX"
@@ -90,7 +91,9 @@ static const struct elf_version_note app_version = {
 
 
 volatile sig_atomic_t keep_running = 1;
-int log_level = 2;
+atomic_int log_level = 2;	// Atomic because it can be written to from console_listener_thread and read from other threads
+#define LOG_BUF_SIZE 1024	// Maximum length of single log message
+#define TRUNC_TAG " ... [TRUNCATED]"
 int port = DEFAULT_PORT;
 int target_fps = DEFAULT_FPS;
 int stats_int = DEFAULT_STATS_INTERVAL;
@@ -192,15 +195,14 @@ void restore_console_state(void)
 }
 
 void log_msg(int level, const char *fmt, ...)
-{
-    if (level <= log_level)
+{	// Thread safe print of log entry
+    if (level <= atomic_load(&log_level))
     {
-        va_list args;
-        va_start(args, fmt);
         time_t now = time(NULL);
         char t_str[32];
         struct tm *tm_info = localtime(&now);
         strftime(t_str, sizeof(t_str), "%Y-%m-%d %H:%M:%S", tm_info);
+        
         const char *lbl = "INFO";
         if (level == -1)
             lbl = "NOTICE";
@@ -210,11 +212,29 @@ void log_msg(int level, const char *fmt, ...)
             lbl = "WARN";
         else if (level == 3)
             lbl = "DEBUG";
-        printf("[%s] [%s] ", t_str, lbl);
-        vprintf(fmt, args);
-        printf("\n");
-        fflush(stdout);
+
+        va_list args;
+        va_start(args, fmt);
+        
+        char msg_buffer[LOG_BUF_SIZE]; 
+        // vsnprintf returns the length the string *would* have been
+        int result = vsnprintf(msg_buffer, sizeof(msg_buffer), fmt, args);
+        
         va_end(args);
+
+        // Check if the message was truncated
+        if (result >= (int)sizeof(msg_buffer))
+        {
+            // Calculate where to overlay the truncation tag at the end of the buffer
+            size_t overwrite_pos = sizeof(msg_buffer) - strlen(TRUNC_TAG) - 1;
+            
+            // Append the tag cleanly, ensuring a null terminator is kept
+			snprintf(&msg_buffer[overwrite_pos], strlen(TRUNC_TAG) + 1, "%s", TRUNC_TAG);
+        }
+
+        // Print everything out in ONE atomic call
+        printf("[%s] [%s] %s\n", t_str, lbl, msg_buffer);
+        fflush(stdout);
     }
 }
 
