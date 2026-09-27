@@ -92,6 +92,8 @@ for example - to run in Source mode on a Raspberry Pi Zero 2W player you would
 (replace "version" below with the actual value from the release asset)
 
 ```bash
+mkdir vismux
+cd vismux
 wget https://github.com/PaulWebster/vismux/releases/download/version/vismux-version-armv6.tar.gz
 gunzip vismux-version-armhf.tar.gz
 tar -xvf vismux-version-armhf.tar
@@ -256,6 +258,17 @@ sudo apt update
 sudo apt install build-essential gcc-arm-linux-gnueabihf
 ```
 *Note: A native ARM host cannot cross-compile Intel (`x86_64` / `x86-32`) binaries out-of-the-box via standard apt utilities.*
+
+### Host Option C: Compiling on piCorePlayer itself
+You can compile on piCorePlayer and then copy the resulting binary to another piCorePlayer system with the same architecture.  
+Do not compile on, for example, a Raspberry Pi 4 and copy to a Raspberry Pi Model B+  
+From the pCP Extensions page install compiletc.tcz  
+Collect extract the vismux release as described above  
+Then "make" the binary
+```bash
+make native
+```
+You should then have a binary file called "vismux".
 
 ---
 

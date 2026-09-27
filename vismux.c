@@ -303,12 +303,13 @@ void *console_listener_thread(void *arg)
                 }
                 else if (ch == 'l' || ch == 'L')
                 {
-					int local_log_level = atomic_fetch_add(&log_level, 1);
+					int local_log_level = atomic_load(&log_level);
+					local_log_level++;
 
-					if (local_log_level >= 3 || local_log_level < 0) {
-						atomic_store(&log_level, 0);
+					if (local_log_level > 3 || local_log_level < 0) {
 						local_log_level = 0;
 					}
+					atomic_store(&log_level, local_log_level);
                     const char *level_names[] = {"0 (ERROR)", "1 (WARN)", "2 (INFO)", "3 (DEBUG)"};
                     log_msg(-1, "Console log level cycled dynamically to: %s", level_names[local_log_level]);
                 }
