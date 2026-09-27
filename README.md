@@ -71,9 +71,9 @@ Press `q` or `Ctrl+C` to stop waiting. The wait option does not bypass the multi
 ```
 *Note: the "--server" IP address is of the Source `vismux` not of **Lyrion Music Server**.*
 
-If you omit the --mac parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.
-*Note: Jivelite-Vis from after September 2026 is required for this capability.*
-**cava** can be configured to look for any particular Squeezelite MAC address - so in this case the -MAC can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
+If you omit the --mac parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.  
+*Note: Jivelite-Vis from after September 2026 is required for this capability.*  
+**cava** can be configured to look for any particular Squeezelite MAC address - so in this case the --mac can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
 
 ### 3. Downloading and unpacking
 You can build `vismux` from the source code (instructions are below) or you can use a pre-built binary.
@@ -178,6 +178,8 @@ Production `.service` file templates are provided in the `/systemd` project dire
 Running multiple instances on a single host is possible - but if using systemd this would require a distinct .service file for each with customised service names and ports
 
 If port conflicts are expected on the network interface loops, remember to append the custom `--discover-port <port>` flag or `--no-discover` directive inside the unit's `ExecStart` execution command string.
+
+Set the path to the executable binary to the correct place for you. In the templates it is assumed that the binary is copied to /usr/local/bin as vismux
 
 ### 1. Customising the Source Service (`vismux-source.service`)
 Open the template file and modify the `ExecStart` line to include the actual hardware MAC address of your Squeezelite player:
