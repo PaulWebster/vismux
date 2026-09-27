@@ -1,4 +1,5 @@
 # vismux
+<h1><img src="assets/vismux-logo.svg" alt="vismux logo" width="100" valign="middle">vismux</h1>
 
 Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown away from the player. It replicates the data over a UDP network pipeline to create POSIX Shared Memory in same format as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly.
 
