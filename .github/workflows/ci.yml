@@ -93,7 +93,9 @@ jobs:
     - name: Package release assets
       run: |
         mkdir -p release
-        for target in native x86_64 x86-32 aarch64 armhf armv6; do
+        # Do not include "native" in packaging. The compilation section verifies that it compiles but no need to publish
+        # since it is for end-users to compile their own
+        for target in x86_64 x86-32 aarch64 armhf armv6; do
           case "$target" in
             native) binary="vismux" ;;
             *) binary="vismux-$target" ;;
