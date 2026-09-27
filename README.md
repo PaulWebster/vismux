@@ -25,6 +25,7 @@ Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown a
 - [Environment Preparation & Compilation](#environment-preparation--compilation)
 	- [Host Option A: Compiling on a 64-bit Intel/AMD Workstation (Ubuntu / Debian)](#host-option-a-compiling-on-a-64-bit-intelamd-workstation-ubuntu--debian)
 	- [Host Option B: Compiling on a 64-bit Raspberry Pi Host (Raspberry Pi OS 64-bit)](#host-option-b-compiling-on-a-64-bit-raspberry-pi-host-raspberry-pi-os-64-bit)
+	- [Host Option C: Compiling on piCorePlayer itself](#host-option-c-compiling-on-picoreplayer-itself)
 	- [Compilation Commands Matrix](#compilation-commands-matrix)
 
 ## Features
@@ -263,7 +264,7 @@ sudo apt install build-essential gcc-arm-linux-gnueabihf
 You can compile on piCorePlayer and then copy the resulting binary to another piCorePlayer system with the same architecture.  
 Do not compile on, for example, a Raspberry Pi 4 and copy to a Raspberry Pi Model B+  
 From the pCP Extensions page install compiletc.tcz  
-Collect extract the vismux release as described above  
+Collect and extract the vismux release as described above.  
 Then "make" the binary
 ```bash
 make native
