@@ -49,7 +49,7 @@
 
 #include <elf.h>
 #define VENDOR_STR "VISMUX"
-#define APP_VERSION "0.0.9j"
+#define APP_VERSION "0.0.9k"
 
 #define VIS_BUF_SIZE 16384
 #define MAX_DESTINATIONS 16
@@ -92,6 +92,8 @@ static const struct elf_version_note app_version = {
 
 volatile sig_atomic_t keep_running = 1;
 atomic_int log_level = 2;	// Atomic because it can be written to from console_listener_thread and read from other threads
+atomic_int force_stats_log = 0;	// Atomic because it can be written to from console_listener_thread and read/reset from other threads
+#define STATS_LOG_LEVEL 3
 #define LOG_BUF_SIZE 1024	// Maximum length of single log message
 #define TRUNC_TAG " ... [TRUNCATED]"
 int port = DEFAULT_PORT;
@@ -300,9 +302,18 @@ void *console_listener_thread(void *arg)
                 }
                 else if (ch == 'l' || ch == 'L')
                 {
-                    log_level = (log_level + 1) % 4;
+					int local_log_level = atomic_fetch_add(&log_level, 1);
+
+					if (local_log_level >= 3 || local_log_level < 0) {
+						atomic_store(&log_level, 0);
+						local_log_level = 0;
+					}
                     const char *level_names[] = {"0 (ERROR)", "1 (WARN)", "2 (INFO)", "3 (DEBUG)"};
-                    log_msg(-1, "Console log level cycled dynamically to: %s", level_names[log_level]);
+                    log_msg(-1, "Console log level cycled dynamically to: %s", level_names[local_log_level]);
+                }
+                else if (ch == 's' || ch == 'S')
+                {	// Request stats now
+					atomic_store(&force_stats_log, 1);
                 }
                 else if (ch == 'v' || ch == 'V')
                 {
@@ -876,17 +887,32 @@ void run_destination(const char *server_ip)
             if (is_full_frame)
                 total_full_frames++;
 
+			int current_level = STATS_LOG_LEVEL;
+
+			if ( atomic_load(&force_stats_log) != 0 )
+			{
+				current_level = -1;	// NOTIFY
+			}
+
             time_t current_time = time(NULL);
-            if (first_frame || current_time - last_stats_log_time >= stats_int)
+            if (first_frame || current_time - last_stats_log_time >= stats_int || current_level != STATS_LOG_LEVEL)
             {
-                log_msg(3, "Processing updates: [Total frames: captured: %" PRIu64 ", dropped: %" PRIu64 ", full: %" PRIu64 "] [Total Data: %.2f MB]",
+				
+				
+                log_msg(current_level, "Processing updates: [Total frames: captured: %" PRIu64 ", dropped: %" PRIu64 ", full: %" PRIu64 "] [Total Data: %.2f MB]",
                         total_received_frames,
                         total_dropped_frames,
                         total_full_frames,
                         (double)total_received_bytes / (1024.0 * 1024.0)
                         );
+				
                 last_stats_log_time = current_time;
             }
+			
+			if (current_level != STATS_LOG_LEVEL)
+			{
+				atomic_store(&force_stats_log, 0);
+			}
 
             if (msg->payload_len <= wire_headers_sz || msg->payload_len > (wire_headers_sz + sizeof(global_shm_ptr->buffer)) || (size_t)bytes_in < (sizeof(msg_hdr_t) + msg->payload_len))
                 continue;
@@ -1163,8 +1189,9 @@ int main(int argc, char *argv[])
             printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
             printf("Interactive Controls (does not require Enter):\n");
             printf("  Press 'v'         Version - Display application version details\n");
-            printf("  Press 'q'         Quit - Instant terminal shutdown\n");
+            printf("  Press 'q'         Quit - Request shutdown\n");
             printf("  Press 'l'         Log Level - Cycle log levels dynamically (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)\n");
+			printf("  Press 's'         Stats - Request stats summary on next data reception\n");
             return 0;
         }
         else

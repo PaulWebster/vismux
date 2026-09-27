@@ -1,6 +1,6 @@
 # vismux
 
-A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifically for **Squeezelite** audio visualizer data. It replicates the data over a UDP network pipeline to create SHM in same format as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly on a system that is remote from the Squeezelite player.
+Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown away from the player. It replicates the data over a UDP network pipeline to create POSIX Shared Memory in same format as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ A low latency, real-time POSIX Shared Memory (SHM) replicator tailored specifica
 	- [Compilation Commands Matrix](#compilation-commands-matrix)
 
 ## Features
-- **Replicate `Squeezelite` visualiser data** (for VU Meters and the like) from a "headless" system to a Linux system with a display
+- **Replicate `Squeezelite` visualiser data** (for VU Meters and the like) from a "headless" system to a POSIX-compliant system (such as Linux) with a display
 - **Multi-Client Multiplexing:** A single source engine can push synchronization packets to up to 16 remote destination nodes concurrently.
 - **Pause State Synchronization:** Instantly pushes a silence frame to drop visualizer animations back down to baseline when audio playback pauses and suspends network traffic.
 - **Out-of-Order Jitter Filter:** Automatically drops late UDP packets caused by network congestion.
@@ -137,7 +137,8 @@ pcp br
  Do not require hitting Enter/CR
 - Press `v`             Version - Display application version details
 - Press `q`             Quit - close down ``vismux``
-- Press `l`             Log level - Cycle console log levels dynamically mid-flight (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG).
+- Press `l`             Log level - Cycle console log levels dynamically mid-flight (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)
+- Press `s`             Stats - Request stats summary on next data reception
 
 ## Service Discovery Mode
 
