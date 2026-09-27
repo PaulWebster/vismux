@@ -105,6 +105,7 @@ int forced_proto_version = 2;
 bool keep_shm = true;
 char shm_path[128] = {0};
 bool wait_for_shm = false;
+bool has_interactive_tty = false;	// set in main
 
 // Discovery Layer Runtime Flags
 bool disable_discovery_listener = false;
@@ -889,7 +890,7 @@ void run_destination(const char *server_ip)
 
 			int current_level = STATS_LOG_LEVEL;
 
-			if ( atomic_load(&force_stats_log) != 0 )
+			if ( has_interactive_tty && atomic_load(&force_stats_log) != 0 )
 			{
 				current_level = -1;	// NOTIFY
 			}
@@ -1252,7 +1253,7 @@ int main(int argc, char *argv[])
     }
 
     pthread_t ui_thread, disc_thread;
-    bool has_interactive_tty = isatty(STDIN_FILENO);
+    has_interactive_tty = isatty(STDIN_FILENO);
     if (has_interactive_tty)
         pthread_create(&ui_thread, NULL, console_listener_thread, NULL);
 
