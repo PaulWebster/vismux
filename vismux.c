@@ -47,9 +47,8 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#include <elf.h>
+#define APP_VERSION "0.0.9l"
 #define VENDOR_STR "VISMUX"
-#define APP_VERSION "0.0.9k"
 
 #define VIS_BUF_SIZE 16384
 #define MAX_DESTINATIONS 16
@@ -70,6 +69,9 @@
 #define SQUEEZELITE_SHM_PREFIX "squeezelite-"
 #define SQUEEZELITE_SHM_PREFIX_LEN (sizeof(SQUEEZELITE_SHM_PREFIX) - 1)
 
+#ifndef NOELF	// ELF support not included
+#include <elf.h>
+
 // Define a structured layout matching an official ELF note entry
 struct elf_version_note {
     Elf64_Word namesz;   // Size of the vendor name string
@@ -88,7 +90,7 @@ static const struct elf_version_note app_version = {
     .name = "VISMUX",
     .desc = APP_VERSION
 };
-
+#endif	// NOELF
 
 volatile sig_atomic_t keep_running = 1;
 atomic_int log_level = 2;	// Atomic because it can be written to from console_listener_thread and read from other threads
@@ -450,15 +452,33 @@ void init_destination_shm(vis_t *shm_ptr)
 bool setup_destination_shm(const char *path)
 {
     global_shm_fd = shm_open(path, O_CREAT | O_RDWR, 0666);
-    if (global_shm_fd == -1 || ftruncate(global_shm_fd, sizeof(vis_t)) == -1)
+    if (global_shm_fd == -1)
     {
-        perror("SHM error");
-        if (global_shm_fd != -1)
+        perror("SHM open error");
+        return false;
+    }
+
+    // Check if the memory size has already been configured
+    struct stat shm_stat;
+    if (fstat(global_shm_fd, &shm_stat) == -1)
+    {
+        perror("SHM fstat error");
+        close(global_shm_fd);
+        global_shm_fd = -1;
+        return false;
+    }
+
+    // Only ftruncate if the segment is brand new (size is 0)
+	bool is_creator = (shm_stat.st_size == 0);
+    if (is_creator)
+    {
+        if (ftruncate(global_shm_fd, sizeof(vis_t)) == -1)
         {
+            perror("SHM truncate error");
             close(global_shm_fd);
             global_shm_fd = -1;
+            return false;
         }
-        return false;
     }
 
     global_shm_ptr = (vis_t *)mmap(0, sizeof(vis_t), PROT_READ | PROT_WRITE, MAP_SHARED, global_shm_fd, 0);
@@ -469,7 +489,14 @@ bool setup_destination_shm(const char *path)
         global_shm_fd = -1;
         return false;
     }
-    init_destination_shm(global_shm_ptr);
+
+    // Initialise if we created it - with risk of corrupted data from earlier run being present
+	// or fighting with some other application (Squezelite is obvious candidate) - expect issues if local Squeezelite using same memory
+	if (is_creator)
+    {
+        init_destination_shm(global_shm_ptr);
+    }
+    
     return true;
 }
 

@@ -1,11 +1,13 @@
 CC = gcc
 LIBS = -lrt
+LIBSOSX = 
 
 # Shared compilation parameters across all hardware environments
 CFLAGS_COMMON = -Wall -Wextra -O3 -pthread -D_FILE_OFFSET_BITS=64
 
 # Target-Specific Variable Extensions
 CFLAGS_NAT     = 
+CFLAGS_NATOSX  = -DNOELF
 CFLAGS_INTEL64 = 
 CFLAGS_INTEL32 = 
 CFLAGS_INTEL32_OLD = -m32
@@ -23,13 +25,14 @@ CFLAGS_ARMV6  = -march=armv6 -static -marm -mfpu=vfp -mfloat-abi=hard
 
 # Explicitly Defined Architectural Output Signatures
 TARGET_NATIVE  = vismux
+TARGET_NATIVEOSX  = vismux-osx
 TARGET_X86_64  = vismux-x86_64
 TARGET_X86_32  = vismux-x86-32
 TARGET_ARM64   = vismux-aarch64
 TARGET_ARMHF   = vismux-armhf
 TARGET_ARMV6   = vismux-armv6
 
-.PHONY: all clean native x86_64 x86-32 aarch64 armhf armv6
+.PHONY: all clean native nativeosx x86_64 x86-32 aarch64 armhf armv6
 
 # Running a bare 'make' compiles the host's native setup
 all: native
@@ -64,5 +67,10 @@ armv6: vismux.c
 	$(ARM32V6_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMV6) $< -o $(TARGET_ARMV6) $(LIBS)
 	@echo "[+] Cross-compiled ARMv6 (Pi Zero/1) binary: $(TARGET_ARMV6)"
 
+# 7. native on OSX
+nativeosx: vismux.c
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NATOSX) $< -o $(TARGET_NATIVEOSX) $(LIBSOSX)
+	@echo "[+] Compiled local native binary: $(TARGET_NATIVEOSX)"
+	
 clean:
 	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6)
