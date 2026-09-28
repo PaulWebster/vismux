@@ -4,8 +4,14 @@ on:
   push:
     branches: [ main, master ]
     tags: [ 'v*' ]
+    paths:
+      - 'vismux.c'
+      - 'Makefile'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'vismux.c'
+      - 'Makefile'
   workflow_dispatch:
 
 permissions:
