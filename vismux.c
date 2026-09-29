@@ -47,7 +47,7 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#define APP_VERSION "0.0.9l"
+#define APP_VERSION "0.0.9m"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
