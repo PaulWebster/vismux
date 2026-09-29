@@ -1,5 +1,6 @@
 CC = gcc
-LIBS = -lrt
+# Used to have -lrt (librt.so) but not needed with modern glibc
+LIBS = 
 LIBSOSX = 
 
 # Shared compilation parameters across all hardware environments

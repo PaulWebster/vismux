@@ -468,7 +468,7 @@ bool setup_destination_shm(const char *path)
         return false;
     }
 
-    // Only ftruncate if the segment is brand new (size is 0)
+    // Only ftruncate if the segment is brand new (size is 0) - because macOS does not support setting size on pre-existing SHM
 	bool is_creator = (shm_stat.st_size == 0);
     if (is_creator)
     {

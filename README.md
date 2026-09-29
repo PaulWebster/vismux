@@ -51,7 +51,9 @@ The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for 
 If exactly one is found, it is selected automatically.  
 If multiple are found, `vismux` lists them and exits so the intended player can be selected with `--mac`.  
 Squeezelite must be run with the visualiser enabled (-v command line parameter).  
-This can be checked by listing the available SHM while Squeezelite is running.  
+This can be checked by listing the available SHM while Squeezelite is running.
+
+*Note: Although the --mac parameter is optional on Source, it must be treated as mandatory on macOS / OSX because that operating system does not provide an easy way to make a list of available SHM *
 
 ```bash
 ls /dev/shm/squeezelite-*
@@ -128,6 +130,7 @@ pcp br
 ### Global Configuration Flags
 - `-h, --help`          Display the help manual with usage instructions.
 - `-v, --version`       Display application version details.
+- `--mac <mac_address>` Squeezelite MAC address
 - `--port <p>`          Override the operational UDP data streaming port (default **`23483`**).
 - `--wait-for-shm`      *(Source Only)* If no Squeezelite visualizer segment is found, keep polling `/dev/shm` until one appears. Without this option, source mode exits with an error.
 - `--mac-timeout <sec>` *(Destination Only)* Time to wait for a valid source MAC before rotating the subscription port (default **`2`** seconds).
@@ -149,6 +152,7 @@ pcp br
 `vismux` features an integrated **UDP Broadcast Discovery Protocol** operating over a dedicated port (`DEFAULT_PORT + 1`, or **`23484`** by default). This allows nodes on the same local subnet to announce themselves or scan for peers automatically, outputting completely raw data records designed for direct ingestion by shell wrappers and deployment scripts.
 
 *Note: This will only find instances using the requested port. If you have other instances using a different port that perform a discover request using that port.*
+*Note: If there is a firewall in place then the discovery port will need to be open for this process.*
 
 ### Scanning the Subnet
 To poll your local network for active `vismux` instances, pass the `--discover` parameter flag:
@@ -178,7 +182,9 @@ SOURCE,192.168.2.140,23483,b8:27:eb:aa:bb:cc,0.1.0
 
 ## Systemd Automation & Customisation
 
-Production `.service` file templates are provided in the `/systemd` project directory. Because these background daemons require device-specific parameters, **users must edit the files before deployment to match their network topography.**
+Some operating systems (not macOS or piCorePlayer) use systemd to run background processes on startup
+
+Example `.service` file templates are provided in the `/systemd` project directory. Because these background daemons require device-specific parameters, **users must create their own files before deployment to match their network topography.**
 
 Running multiple instances on a single host is possible - but if using systemd this would require a distinct .service file for each with customised service names and ports
 
@@ -187,7 +193,12 @@ If port conflicts are expected on the network interface loops, remember to appen
 Set the path to the executable binary to the correct place for you. In the templates it is assumed that the binary is copied to /usr/local/bin as vismux
 
 ### 1. Customising the Source Service (`vismux-source.service`)
-Open the template file and modify the `ExecStart` line to include the actual hardware MAC address of your Squeezelite player:
+Copy the template file and modify the `ExecStart` line to include the actual hardware MAC address of your Squeezelite player:
+```bash
+cp vismux-source.service-template vismux-source.service
+vi vismux-source.service
+```
+
 ```ini
 ExecStart=/usr/local/bin/vismux --source --mac YOUR_PLAYER_MAC_HERE --log-level 2
 ```
@@ -198,7 +209,12 @@ ExecStart=/usr/local/bin/vismux --source --wait-for-shm --log-level 2
 Copy the finished configuration file to `/etc/systemd/system/vismux-source.service` on the Squeezelite player machine.
 
 ### 2. Customising the Destination Service (`vismux-dest.service`)
-Open the template file and update the target server IP. The target MAC is optional:
+Copy the template file and update the target server IP. The target MAC is optional:
+```bash
+cp vismux-dest.service-template vismux-dest.service
+vi vismux-dest.service
+```
+
 ```ini
 ExecStart=/usr/local/bin/vismux --destination --server YOUR_SOURCE_IP_HERE [--mac YOUR_PLAYER_MAC_HERE] --log-level 2
 ```
@@ -283,11 +299,12 @@ make clean
 
 # Compile the target for your deployment machine:
 make native    # Matches your current host CPU architecture configuration
-make x86_64    # For modern Intel/AMD 64-bit systems (Desktops/Servers)
-make x86-32    # For legacy Intel/AMD 32-bit hardware profiles
-make aarch64   # For Raspberry Pi 3/4/5, Zero 2 W running a 64-bit OS
-make armhf     # For Raspberry Pi 2/3/4 running a legacy 32-bit OS
-make armv6     # For Raspberry Pi 1, Raspberry Pi Zero (Classic 32-bit)
+make nativeosx # Matches your current host CPU architecture configuration specifically for macOS / OSX
+make x86_64    # Cross-compile on ARM-64 for modern Intel/AMD 64-bit systems (Desktops/Servers)
+make x86-32    # Cross-compile on ARM-64 for legacy Intel/AMD 32-bit hardware profiles
+make aarch64   # Compile on ARM-64 for Raspberry Pi 3/4/5, Zero 2 W running a 64-bit OS
+make armhf     # Cross-compile on ARM-64 for Raspberry Pi 2/3/4 running a legacy 32-bit OS
+make armv6     # Cross-compile on ARM-64 for Raspberry Pi 1, Raspberry Pi Zero
 ```
 *⚠️ Warning for Classic Pi Zero/Pi 1 Users: You must explicitly use `make armv6` to apply the required hardware down-tuning constraints. Running a native 32-bit build (`make native`) on a Pi 3/4 and copying it to a Pi Zero will cause an instant `Illegal Instruction` crash.*
 
