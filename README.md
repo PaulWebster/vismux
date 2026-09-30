@@ -186,11 +186,11 @@ ROLE,IP_ADDRESS,PORT,MAC_ADDRESS,APP_VERSION[,OUTPUTS[,FIFO_PATH]]
 SOURCE,192.168.2.140,23483,2c:cf:67:82:cc:29,0.1.0
 DESTINATION,192.168.2.227,23483,2c:cf:67:82:cc:29,0.1.0,SHM
 SOURCE,192.168.2.140,23483,b8:27:eb:aa:bb:cc,0.1.0
-DESTINATION,192.168.2.228,23483,2c:cf:67:82:cc:29,0.1.0,PEPPYMETER,/home/pi/myfifo
-DESTINATION,192.168.2.229,23483,2c:cf:67:82:cc:29,0.1.0,SHM+PEPPYMETER,/home/pi/otherfifo
+DESTINATION,192.168.2.228,23483,2c:cf:67:82:cc:29,0.1.0,PEP,/home/pi/myfifo
+DESTINATION,192.168.2.229,23483,2c:cf:67:82:cc:29,0.1.0,SQU+PEP,/home/pi/otherfifo
 ```
 *Note: Because deduplication assesses the entire combined dataset, a single host IP hosting or handling multiple separate MAC streams will have all discoverable entries listed.*
-Destinations keep the `DESTINATION` role and report outputs as `SHM`, `PEPPYMETER`, `SHM+PEPPYMETER`, or `NONE`. When PeppyMeter is configured, the FIFO path is appended as the next CSV field; paths containing commas or quotes are CSV-escaped. Source responses retain the original five fields. Older probers can still identify destinations from the unchanged response prefix but will not display the output details.
+Destinations keep the `DESTINATION` role and report outputs as `SQU`, `PEP`, `SQU+PEP`, or `NONE`. When PeppyMeter is configured, the FIFO path is appended as the next CSV field; paths containing commas or quotes are CSV-escaped. Source responses retain the original five fields. Older probers can still identify destinations from the unchanged response prefix but will not display the output details.
 
 ---
 

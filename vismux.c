@@ -47,7 +47,7 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#define APP_VERSION "0.0.9n2"
+#define APP_VERSION "0.0.9n3"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
@@ -1188,10 +1188,6 @@ void *discovery_responder_thread(void *arg)
                     char target_ip_str[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &client_addr.sin_addr, target_ip_str, INET_ADDRSTRLEN);
 
-                    // Debug log output tracing the dynamic network reply dispatch
-                    log_msg(3, "Dispatching discovery response packet back to prober host: %s:%d",
-                            target_ip_str, ntohs(client_addr.sin_port));
-
                     uint8_t output_flags = 0;
                     size_t output_flags_len = role_id == DISCOVER_ROLE_DESTINATION ? 1 : 0;
                     size_t fifo_path_len = 0;
@@ -1216,6 +1212,11 @@ void *discovery_responder_thread(void *arg)
                         if (fifo_path_len > 0)
                             memcpy(response_buf + sizeof(tx_packet) + output_flags_len,
                                    peppymeter_fifo_path, fifo_path_len);
+
+                        // Debug log output tracing the dynamic network reply dispatch
+                        log_msg(3, "Dispatching discovery response packet back to prober host: %s:%d",
+                            target_ip_str, ntohs(client_addr.sin_port));
+
                         sendto(disc_fd, response_buf, response_len, 0,
                                (struct sockaddr *)&client_addr, sizeof(client_addr));
                         free(response_buf);
@@ -1378,14 +1379,31 @@ void run_discovery_prober()
             printf("%s,%s,%u,%s,%s", role_name, ip_str, response_port, resp.mac, response_version);
             if (resp.role == DISCOVER_ROLE_DESTINATION)
             {
-                const char *outputs_name = "NONE";
-                if ((output_flags & (DISCOVER_OUTPUT_SHM | DISCOVER_OUTPUT_PEPPYMETER)) ==
-                    (DISCOVER_OUTPUT_SHM | DISCOVER_OUTPUT_PEPPYMETER))
-                    outputs_name = "SHM+PEPPYMETER";
-                else if (output_flags & DISCOVER_OUTPUT_SHM)
-                    outputs_name = "SHM";
-                else if (output_flags & DISCOVER_OUTPUT_PEPPYMETER)
-                    outputs_name = "PEPPYMETER";
+                const struct
+                {
+                    uint8_t flag;
+                    const char *name;
+                } output_types[] = {
+                    {DISCOVER_OUTPUT_SHM, "SQU"},
+                    {DISCOVER_OUTPUT_PEPPYMETER, "PEP"}};
+                char outputs_name[32] = "";
+                size_t outputs_len = 0;
+                for (size_t i = 0; i < sizeof(output_types) / sizeof(output_types[0]); i++)
+                {
+                    if (!(output_flags & output_types[i].flag))
+                        continue;
+
+                    int appended = snprintf(outputs_name + outputs_len, sizeof(outputs_name) - outputs_len,
+                                            "%s%s", outputs_len ? "+" : "", output_types[i].name);
+                    if (appended < 0 || (size_t)appended >= sizeof(outputs_name) - outputs_len)
+                    {
+                        outputs_name[sizeof(outputs_name) - 1] = '\0';
+                        break;
+                    }
+                    outputs_len += (size_t)appended;
+                }
+                if (outputs_len == 0)
+                    snprintf(outputs_name, sizeof(outputs_name), "NONE");
                 printf(",%s", outputs_name);
             }
             if (fifo_path)
