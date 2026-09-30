@@ -7,7 +7,11 @@ This repository contains precise structural timing code interfacing directly wit
 Before modifying the memory mapping structures or the network protocol serialization logic, cross-reference your changes with the official, authoritative upstream **Squeezelite** repository maintained by Ralph Irving:
 
 *   **Upstream Repository:** [ralph-irving/squeezelite (GitHub)](https://github.com)
-*   **Most Relevant Source File:** [`output_vis.c`](https://github.com/blob/master/output_vis.c)
+*   **Most Relevant Source File:** [`output_vis.c`](https://github.com/ralph-irving/squeezelite/blob/master/output_vis.c)
+
+For the integration with PeppyMeter:
+
+*   **Upstream Repository:** [project-owner/PeppyMeter] (GitHub)](https://github.com)
 
 ### Critical Sections in `output_vis.c` to Analyze:
 1.  **The Shared Memory Struct Definition:** Look for the static block definition `struct vis_t` inside `output_vis.c`. This establishes the strict sequential byte order, variable tracking types, and internal memory padding.

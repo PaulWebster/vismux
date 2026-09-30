@@ -1,7 +1,7 @@
 # <h1><img src="assets/vismux-logo.svg" alt="vismux logo" width="150" valign="middle">vismux</h1>
 
 
-Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown away from the player. It replicates the data over a UDP network pipeline to create POSIX Shared Memory in same format as Squeezelite, allowing Jivelite and third-party tools like CAVA to run seamlessly.
+Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown away from the player. It replicates the data over a UDP network pipeline to create POSIX Shared Memory in same format as Squeezelite and/or PeppyMeter FIFO/named pipe, allowing Jivelite and third-party tools like CAVA and PeppyMeter to run seamlessly.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ Replicate **Squeezelite** audio visualizer data to allow VU meters to be shown a
 - **Out-of-Order Jitter Filter:** Automatically drops late UDP packets caused by network congestion.
 - **Decentralised UDP Service Discovery:** Automatic subnet probing maps active `vismux` nodes.
 
-*Note: This does not run on Windows because it does not have the same POSIX Shared Memory support as Linux. It has only been tested on Linux (including piCorePlayer)*
+*Note: This does not run on Windows because it does not have the same POSIX Shared Memory support as Linux. It has been tested on Linux (including piCorePlayer 11) and very old macOS 12 on Intel - anyone want to donate a Mac Mini on ARM?*
 
 ## Usage
 
@@ -79,6 +79,15 @@ If you omit the --mac parameter then `vismux` will use the MAC address that the 
 *Note: Jivelite-Vis from after September 2026 is required for this capability.*  
 **cava** can be configured to look for any particular Squeezelite MAC address - so in this case the --mac can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
 
+To feed PeppyMeter, create a FIFO and pass its path to the destination:
+For example:
+```bash
+mkfifo /home/pi/myfifo
+./vismux --destination --server 192.168.1.50 --peppymeter-fifo /home/pi/myfifo
+```
+Set PeppyMeter's `[data.source]` configuration to `type = pipe` and `pipe.name = /home/pi/myfifo`, with `volume.max.in.pipe = 100`. `vismux` writes one four-byte record per received packet: little-endian unsigned 16-bit left and right peak levels, each scaled from 0 to 100. FIFO output is optional and does not block destination packet handling if PeppyMeter is not reading.
+`--no-shm-output` is optional; without it, destination SHM output remains enabled as before. With it, incoming data and FIFO output continue without creating or updating SHM. Using it without `--peppymeter-fifo` is allowed for transfer diagnostics, but logs a warning because received data has no output sink.
+
 ### 3. Downloading and unpacking
 You can build `vismux` from the source code (instructions are below) or you can use a pre-built binary.
 
@@ -97,7 +106,7 @@ for example - to run in Source mode on a Raspberry Pi Zero 2W player you would
 ```bash
 mkdir vismux
 cd vismux
-wget https://github.com/PaulWebster/vismux/releases/download/version/vismux-version-armv6.tar.gz
+wget https://github.com/PaulWebster/vismux/releases/download/version/vismux-version-armhf.tar.gz
 gunzip vismux-version-armhf.tar.gz
 tar -xvf vismux-version-armhf.tar
 chmod +x vismux-armhf
@@ -105,7 +114,7 @@ chmod +x vismux-armhf
 ```
 You should see a final response similar to:
 ```bash
-vismux version 0.0.9j
+vismux version 0.0.9
 ```
 If you do not then did you download the correct initial file and replace the word "version" in all of the commands above?
 
@@ -136,6 +145,8 @@ pcp br
 - `--mac-timeout <sec>` *(Destination Only)* Time to wait for a valid source MAC before rotating the subscription port (default **`2`** seconds).
 - `--log-level <0-3>`   Filter verbosity outputs (0=ERROR, 1=WARN, 2=INFO, 3=DEBUG). Info level is verbose on Destination so, once working, reduce the level or increase the stats interval.
 - `--stats-int`        *(Destination Only)* Set the interval in seconds between "Processing updates" statistics log messages in Debug level (default **`10`**).
+- `--peppymeter-fifo <path>` *(Destination Only)* Send stereo peak levels to an existing PeppyMeter FIFO.
+- `--no-shm-output`     *(Destination Only)* Do not create, map, or update the destination Squeezelite-compatible SHM segment.
 - `--remove-shm`       *(Destination Only)* Forces the deletion of the shared memory layout on exit. By default, `vismux` preserves the segment so external clients like Jivelite or CAVA stay connected continuously across restarts.
 - `--no-discover`      Disable the background discovery listener thread, rendering the component invisible to --discover requests.
 - `--discover-port <p>` Sets a custom network port to host or look up active service discovery sweeps, bypassing third-party `EADDRINUSE` resource blocks.
@@ -164,19 +175,22 @@ To poll your local network for active `vismux` instances, pass the `--discover` 
 - `--discover-port <port>`: Optional override flag to redirect discovery queries to a custom port to bypass conflicts with third-party local daemons (Defaults to **`23484`**).
 
 ### Discovery Output Format
-Responses are collected, fully deduplicated on an individual full-dataset basis (IP, Port, and MAC address combined), and printed to standard output using a strict, shell-parseable comma-separated template:
+Responses are collected, deduplicated by IP, port, MAC address, peer role, output flags, and (for PeppyMeter) FIFO path, then printed to standard output as comma-separated records:
 
 ```text
-ROLE,IP_ADDRESS,PORT,MAC_ADDRESS,APP_VERSION
+ROLE,IP_ADDRESS,PORT,MAC_ADDRESS,APP_VERSION[,OUTPUTS[,FIFO_PATH]]
 ```
 
 **Example Multi-Node Output:**
 ```text
 SOURCE,192.168.2.140,23483,2c:cf:67:82:cc:29,0.1.0
-DESTINATION,192.168.2.227,23483,2c:cf:67:82:cc:29,0.1.0
+DESTINATION,192.168.2.227,23483,2c:cf:67:82:cc:29,0.1.0,SHM
 SOURCE,192.168.2.140,23483,b8:27:eb:aa:bb:cc,0.1.0
+DESTINATION,192.168.2.228,23483,2c:cf:67:82:cc:29,0.1.0,PEPPYMETER,/home/pi/myfifo
+DESTINATION,192.168.2.229,23483,2c:cf:67:82:cc:29,0.1.0,SHM+PEPPYMETER,/home/pi/otherfifo
 ```
 *Note: Because deduplication assesses the entire combined dataset, a single host IP hosting or handling multiple separate MAC streams will have all discoverable entries listed.*
+Destinations keep the `DESTINATION` role and report outputs as `SHM`, `PEPPYMETER`, `SHM+PEPPYMETER`, or `NONE`. When PeppyMeter is configured, the FIFO path is appended as the next CSV field; paths containing commas or quotes are CSV-escaped. Source responses retain the original five fields. Older probers can still identify destinations from the unchanged response prefix but will not display the output details.
 
 ---
 
@@ -277,7 +291,7 @@ sudo apt install build-essential gcc-arm-linux-gnueabihf
 *Note: A native ARM host cannot cross-compile Intel (`x86_64` / `x86-32`) binaries out-of-the-box via standard apt utilities.*
 
 ### Host Option C: Compiling on piCorePlayer itself
-You can compile on piCorePlayer and then copy the resulting binary to another piCorePlayer system with the same architecture.  
+You can compile on piCorePlayer (verified only on pCP 11) and then copy the resulting binary to another piCorePlayer system with the same architecture.  
 Do not compile on, for example, a Raspberry Pi 4 and copy to a Raspberry Pi Model B+  
 From the pCP Extensions page install compiletc.tcz  
 Collect and extract the vismux release as described above.  

@@ -47,7 +47,7 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#define APP_VERSION "0.0.9m"
+#define APP_VERSION "0.0.9n2"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
@@ -65,6 +65,10 @@
 #define DISCOVER_PORT (DEFAULT_PORT + 1)
 #define DISCOVER_MAGIC "VISMUXv0"
 #define DISCOVER_VERSION_LEN 16
+#define DISCOVER_ROLE_SOURCE 1
+#define DISCOVER_ROLE_DESTINATION 2
+#define DISCOVER_OUTPUT_SHM 0x01
+#define DISCOVER_OUTPUT_PEPPYMETER 0x02
 #define DEFAULT_MAC_TIMEOUT 2
 #define SQUEEZELITE_SHM_PREFIX "squeezelite-"
 #define SQUEEZELITE_SHM_PREFIX_LEN (sizeof(SQUEEZELITE_SHM_PREFIX) - 1)
@@ -105,8 +109,10 @@ int timeout_secs = 2;
 int mac_timeout_secs = DEFAULT_MAC_TIMEOUT;
 int forced_proto_version = 2;
 bool keep_shm = true;
+bool no_shm_output = false;
 char shm_path[128] = {0};
 bool wait_for_shm = false;
+const char *peppymeter_fifo_path = NULL;
 bool has_interactive_tty = false;	// set in main
 
 // Discovery Layer Runtime Flags
@@ -180,6 +186,8 @@ typedef struct
     char mac[18];                       // Alphanumeric buffer: "2c:cf:67:82:cc:29\0"
     char version[DISCOVER_VERSION_LEN]; // Application version; absent in legacy responses
 } __attribute__((packed)) disc_resp_packet_t;
+
+// Destination responses append output flags and, when configured, a NUL-terminated FIFO path.
 
 int global_shm_fd = -1;
 vis_t *global_shm_ptr = MAP_FAILED;
@@ -280,7 +288,7 @@ void release_system_resources()
         munmap(global_shm_ptr, sizeof(vis_t));
     if (global_shm_fd != -1)
         close(global_shm_fd);
-    if (!is_source_mode && !keep_shm && shm_path[0] != '\0')
+    if (!is_source_mode && !no_shm_output && !keep_shm && shm_path[0] != '\0')
     {
         shm_unlink(shm_path);
     }
@@ -762,12 +770,78 @@ void *heartbeat_loop(void *arg)
     return NULL;
 }
 
+static bool ensure_peppymeter_fifo(int *fifo_fd, const char *path, time_t *retry_after)
+{
+    if (*fifo_fd == -2)
+        return false;
+
+    if (*fifo_fd >= 0)
+        return true;
+
+    time_t now = time(NULL);
+    if (now < *retry_after)
+        return false;
+
+    struct stat fifo_stat;
+    if (lstat(path, &fifo_stat) == 0 && !S_ISFIFO(fifo_stat.st_mode))
+    {
+        log_msg(0, "PeppyMeter output path is not a FIFO: %s", path);
+        *fifo_fd = -2;
+        return false;
+    }
+
+    *fifo_fd = open(path, O_WRONLY | O_NONBLOCK);
+    if (*fifo_fd < 0)
+    {
+        *retry_after = now + 1;
+        if (errno != ENOENT && errno != ENXIO)
+            log_msg(1, "Unable to open PeppyMeter FIFO %s: %s", path, strerror(errno));
+        return false;
+    }
+
+    if (fstat(*fifo_fd, &fifo_stat) < 0 || !S_ISFIFO(fifo_stat.st_mode))
+    {
+        log_msg(0, "PeppyMeter output path is not a FIFO: %s", path);
+        close(*fifo_fd);
+        *fifo_fd = -2;
+        return false;
+    }
+
+    log_msg(2, "PeppyMeter FIFO connected: %s", path);
+    return true;
+}
+
+static void write_peppymeter_fifo(int *fifo_fd, time_t *retry_after, const uint8_t record[4])
+{
+    ssize_t bytes_written;
+    do
+    {
+        bytes_written = write(*fifo_fd, record, 4);
+    } while (bytes_written < 0 && errno == EINTR);
+
+    if (bytes_written == 4 || (bytes_written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)))
+        return;
+
+    if (bytes_written < 0)
+        log_msg(1, "PeppyMeter FIFO disconnected or write failed: %s", strerror(errno));
+    close(*fifo_fd);
+    *fifo_fd = -1;
+    *retry_after = time(NULL) + 1;
+}
+
 void run_destination(const char *server_ip)
 {
     is_source_mode = false;
-    bool shm_ready = shm_path[0] != '\0';
-    if (shm_ready && !setup_destination_shm(shm_path))
+    int peppymeter_fifo_fd = -1;
+    time_t peppymeter_fifo_retry_after = 0;
+    if (peppymeter_fifo_path)
+        signal(SIGPIPE, SIG_IGN);
+    bool shm_output_enabled = !no_shm_output;
+    bool source_ready = shm_path[0] != '\0';
+    if (source_ready && shm_output_enabled && !setup_destination_shm(shm_path))
         exit(EXIT_FAILURE);
+    if (no_shm_output && !peppymeter_fifo_path)
+        log_msg(1, "No destination output is configured; received data will be discarded.");
 
     log_msg(2, "Destination Engine Online (%s) expecting data from: %s:%d", APP_VERSION, server_ip, port);
 
@@ -808,7 +882,7 @@ void run_destination(const char *server_ip)
 
     time_t last_rotation_time = 0;
     time_t last_mac_response_time = time(NULL);
-    bool is_link_active = shm_ready;
+    bool is_link_active = source_ready;
 
     while (keep_running)
     {
@@ -816,7 +890,7 @@ void run_destination(const char *server_ip)
         ssize_t bytes_in = recvfrom(global_sock_fd, rx_window, sizeof(rx_window), 0, NULL, NULL);
         if (bytes_in < 0)
         {
-            bool mac_negotiation_timed_out = !shm_ready &&
+            bool mac_negotiation_timed_out = !source_ready &&
                                              (now_check - last_mac_response_time >= mac_timeout_secs);
             bool link_timed_out = is_link_active &&
                                   (now_check - last_success_packet_time >= timeout_secs);
@@ -892,15 +966,22 @@ void run_destination(const char *server_ip)
                 (size_t)bytes_in >= sizeof(msg_hdr_t) + msg->payload_len)
             {
                 subscription_response_t *response = (subscription_response_t *)(rx_window + sizeof(msg_hdr_t));
-                if (!shm_ready)
+                if (!source_ready)
                 {
                     char negotiated_shm_path[sizeof(shm_path)];
                     if (validate_and_format_mac(response->mac, negotiated_shm_path, sizeof(negotiated_shm_path)))
                     {
                         snprintf(shm_path, sizeof(shm_path), "%s", negotiated_shm_path);
-                        if (setup_destination_shm(shm_path))
+                        if (!shm_output_enabled)
                         {
-                            shm_ready = true;
+                            source_ready = true;
+                            first_frame = true;
+                            last_network_seq = 0;
+                            log_msg(2, "Source MAC received; SHM output disabled: %s", response->mac);
+                        }
+                        else if (setup_destination_shm(shm_path))
+                        {
+                            source_ready = true;
                             first_frame = true;
                             last_network_seq = 0;
                             log_msg(2, "Destination SHM initialized from source MAC: %s", response->mac);
@@ -915,7 +996,7 @@ void run_destination(const char *server_ip)
                         log_msg(1, "Source subscription response contained an invalid MAC address.");
                     }
                 }
-                if (shm_ready)
+                if (source_ready)
                 {
                     last_success_packet_time = now_check;
                     is_link_active = true;
@@ -926,7 +1007,7 @@ void run_destination(const char *server_ip)
 
         if (msg->type == PACKET_DATA)
         {
-            if (!shm_ready || (!first_frame && msg->sequence < last_network_seq && (last_network_seq - msg->sequence) < 100000))
+            if (!source_ready || (!first_frame && msg->sequence < last_network_seq && (last_network_seq - msg->sequence) < 100000))
             {
                 total_dropped_frames++;
                 continue;
@@ -976,37 +1057,69 @@ void run_destination(const char *server_ip)
             if (msg->payload_len <= wire_headers_sz || msg->payload_len > (wire_headers_sz + sizeof(global_shm_ptr->buffer)) || (size_t)bytes_in < (sizeof(msg_hdr_t) + msg->payload_len))
                 continue;
 
-            pthread_rwlock_wrlock(&global_shm_ptr->rwlock);
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
             size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
-            if (received_audio_bytes == sizeof(global_shm_ptr->buffer))
+            if (shm_output_enabled)
             {
-                memcpy(global_shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
-            }
-            else
-            {
-                uint32_t incoming_samples = received_audio_bytes / sizeof(int16_t);
-                for (uint32_t i = 0; i < incoming_samples; i++)
+                pthread_rwlock_wrlock(&global_shm_ptr->rwlock);
+                if (received_audio_bytes == sizeof(global_shm_ptr->buffer))
                 {
-                    uint32_t target_idx = (global_shm_ptr->buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
-                    global_shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
+                    memcpy(global_shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
                 }
-            }
+                else
+                {
+                    uint32_t incoming_samples = received_audio_bytes / sizeof(int16_t);
+                    for (uint32_t i = 0; i < incoming_samples; i++)
+                    {
+                        uint32_t target_idx = (global_shm_ptr->buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
+                        global_shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
+                    }
+                }
 
-            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
-            global_shm_ptr->buf_size = ntohl(wirehdr->buf_size);
-            global_shm_ptr->buf_index = ntohl(wirehdr->buf_index);
-            global_shm_ptr->running = (bool)ntohl(wirehdr->running);
-            global_shm_ptr->rate = ntohl(wirehdr->rate);
-            global_shm_ptr->updated = (uint64_t)time(NULL);
+                vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
+                global_shm_ptr->buf_size = ntohl(wirehdr->buf_size);
+                global_shm_ptr->buf_index = ntohl(wirehdr->buf_index);
+                global_shm_ptr->running = (bool)ntohl(wirehdr->running);
+                global_shm_ptr->rate = ntohl(wirehdr->rate);
+                global_shm_ptr->updated = (uint64_t)time(NULL);
+                pthread_rwlock_unlock(&global_shm_ptr->rwlock);
+            }
 
             first_frame = false;
-            pthread_rwlock_unlock(&global_shm_ptr->rwlock);
+
+            if (peppymeter_fifo_path &&
+                ensure_peppymeter_fifo(&peppymeter_fifo_fd, peppymeter_fifo_path, &peppymeter_fifo_retry_after))
+            {
+                const int16_t *samples = (const int16_t *)incoming_audio_payload;
+                size_t sample_count = received_audio_bytes / sizeof(*samples);
+                int peak_left = 0, peak_right = 0;
+                for (size_t i = 0; i + 1 < sample_count; i += 2)
+                {
+                    int left_sample = samples[i];
+                    int right_sample = samples[i + 1];
+                    int left_level = left_sample < 0 ? -left_sample : left_sample;
+                    int right_level = right_sample < 0 ? -right_sample : right_sample;
+                    if (left_level > peak_left)
+                        peak_left = left_level;
+                    if (right_level > peak_right)
+                        peak_right = right_level;
+                }
+
+                uint16_t left_percent = (uint16_t)((peak_left * 100 + 16384) / 32768);
+                uint16_t right_percent = (uint16_t)((peak_right * 100 + 16384) / 32768);
+                uint8_t fifo_record[4] = {
+                    (uint8_t)(left_percent & 0xff), (uint8_t)(left_percent >> 8),
+                    (uint8_t)(right_percent & 0xff), (uint8_t)(right_percent >> 8)};
+                write_peppymeter_fifo(&peppymeter_fifo_fd, &peppymeter_fifo_retry_after, fifo_record);
+            }
+
             msg_hdr_t ack_hdr = {.protocol_version = msg->protocol_version, .type = PACKET_ACK, .sequence = msg->sequence, .payload_len = 0};
             sendto(global_sock_fd, &ack_hdr, sizeof(msg_hdr_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
         }
     }
     join_thread(&hb_thread);
+    if (peppymeter_fifo_fd >= 0)
+        close(peppymeter_fifo_fd);
 }
 
 void *discovery_responder_thread(void *arg)
@@ -1079,14 +1192,59 @@ void *discovery_responder_thread(void *arg)
                     log_msg(3, "Dispatching discovery response packet back to prober host: %s:%d",
                             target_ip_str, ntohs(client_addr.sin_port));
 
-                    sendto(disc_fd, &tx_packet, sizeof(disc_resp_packet_t), 0,
-                           (struct sockaddr *)&client_addr, sizeof(client_addr));
+                    uint8_t output_flags = 0;
+                    size_t output_flags_len = role_id == DISCOVER_ROLE_DESTINATION ? 1 : 0;
+                    size_t fifo_path_len = 0;
+                    if (role_id == DISCOVER_ROLE_DESTINATION)
+                    {
+                        if (!no_shm_output)
+                            output_flags |= DISCOVER_OUTPUT_SHM;
+                        if (peppymeter_fifo_path)
+                        {
+                            output_flags |= DISCOVER_OUTPUT_PEPPYMETER;
+                            fifo_path_len = strlen(peppymeter_fifo_path) + 1;
+                        }
+                    }
+
+                    size_t response_len = sizeof(tx_packet) + output_flags_len + fifo_path_len;
+                    char *response_buf = malloc(response_len);
+                    if (response_buf)
+                    {
+                        memcpy(response_buf, &tx_packet, sizeof(tx_packet));
+                        if (output_flags_len > 0)
+                            response_buf[sizeof(tx_packet)] = (char)output_flags;
+                        if (fifo_path_len > 0)
+                            memcpy(response_buf + sizeof(tx_packet) + output_flags_len,
+                                   peppymeter_fifo_path, fifo_path_len);
+                        sendto(disc_fd, response_buf, response_len, 0,
+                               (struct sockaddr *)&client_addr, sizeof(client_addr));
+                        free(response_buf);
+                    }
+                    else
+                    {
+                        log_msg(1, "Unable to allocate PeppyMeter discovery response.");
+                    }
                 }
             }
         }
     }
     close(disc_fd);
     return NULL;
+}
+
+static void print_csv_field(const char *field)
+{
+    bool needs_quotes = strpbrk(field, ",\"\r\n") != NULL;
+    if (needs_quotes)
+        putchar('"');
+    for (const char *p = field; *p; p++)
+    {
+        if (*p == '"')
+            putchar('"');
+        putchar(*p);
+    }
+    if (needs_quotes)
+        putchar('"');
 }
 
 void run_discovery_prober()
@@ -1117,6 +1275,7 @@ void run_discovery_prober()
            (struct sockaddr *)&target_addr, sizeof(target_addr));
 
     disc_resp_packet_t resp;
+    char response_buf[65536];
     struct sockaddr_in sender_addr;
     time_t start_time = time(NULL);
 
@@ -1126,6 +1285,9 @@ void run_discovery_prober()
         uint32_t ip;
         uint32_t port;
         char mac[18]; // Storage footprint to match clean "XX:XX:XX:XX:XX:XX\0" length bounds
+        uint8_t role;
+        uint8_t output_flags;
+        uint64_t fifo_path_hash;
     } peer_record_t;
 
 #define MAX_SEEN_PEERS 64
@@ -1137,51 +1299,102 @@ void run_discovery_prober()
     {
         memset(&resp, 0, sizeof(resp));
         socklen_t addr_len = sizeof(sender_addr);
-        ssize_t len = recvfrom(probe_fd, &resp, sizeof(disc_resp_packet_t), 0,
+        ssize_t len = recvfrom(probe_fd, response_buf, sizeof(response_buf), 0,
                                (struct sockaddr *)&sender_addr, &addr_len);
 
-        if (len >= (ssize_t)offsetof(disc_resp_packet_t, version) && resp.type == PACKET_ACK)
-        {
-            if (strncmp(resp.magic, DISCOVER_MAGIC, sizeof(DISCOVER_MAGIC)) == 0)
-            {
-                uint32_t response_port = ntohl(resp.port);
-                const char *response_version = len >= (ssize_t)sizeof(disc_resp_packet_t) && resp.version[0] != '\0'
-                                                    ? resp.version
-                                                    : "unknown";
+        if (len < (ssize_t)offsetof(disc_resp_packet_t, version))
+            continue;
+        size_t base_len = (size_t)len < sizeof(resp) ? (size_t)len : sizeof(resp);
+        memcpy(&resp, response_buf, base_len);
 
-                // Evaluate deduplication across the entire combined data snapshot
-                bool is_duplicate = false;
-                for (int i = 0; i < seen_count; i++)
+        if (resp.type == PACKET_ACK && strncmp(resp.magic, DISCOVER_MAGIC, sizeof(DISCOVER_MAGIC)) == 0)
+        {
+            uint32_t response_port = ntohl(resp.port);
+            const char *response_version = len >= (ssize_t)sizeof(disc_resp_packet_t) && resp.version[0] != '\0'
+                                                ? resp.version
+                                                : "unknown";
+            const char *fifo_path = NULL;
+            uint8_t output_flags = resp.role == DISCOVER_ROLE_DESTINATION ? DISCOVER_OUTPUT_SHM : 0;
+            uint64_t fifo_path_hash = 14695981039346656037ULL;
+            if (resp.role == DISCOVER_ROLE_DESTINATION && len > (ssize_t)sizeof(disc_resp_packet_t))
+            {
+                output_flags = (uint8_t)response_buf[sizeof(disc_resp_packet_t)];
+                if (output_flags & DISCOVER_OUTPUT_PEPPYMETER)
                 {
-                    if (seen_records[i].ip == sender_addr.sin_addr.s_addr &&
-                        seen_records[i].port == response_port &&
-                        strcmp(seen_records[i].mac, resp.mac) == 0)
+                    size_t path_offset = sizeof(disc_resp_packet_t) + 1;
+                    if ((size_t)len > path_offset)
                     {
-                        is_duplicate = true;
-                        break;
+                        char *path_start = response_buf + path_offset;
+                        size_t path_capacity = (size_t)len - path_offset;
+                        size_t path_len = strnlen(path_start, path_capacity);
+                        if (path_len > 0 && path_len < path_capacity)
+                        {
+                            fifo_path = path_start;
+                            for (size_t i = 0; i < path_len; i++)
+                            {
+                                fifo_path_hash ^= (unsigned char)fifo_path[i];
+                                fifo_path_hash *= 1099511628211ULL;
+                            }
+                        }
                     }
                 }
-
-                if (is_duplicate)
-                    continue; // Skip identical duplicate records cleanly
-
-                // Save unique dataset entry to the cache register array
-                if (seen_count < MAX_SEEN_PEERS)
-                {
-                    seen_records[seen_count].ip = sender_addr.sin_addr.s_addr;
-                    seen_records[seen_count].port = response_port;
-                    snprintf(seen_records[seen_count].mac, sizeof(seen_records[seen_count].mac), "%s", resp.mac);
-                    seen_count++;
-                }
-
-                char ip_str[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &sender_addr.sin_addr, ip_str, INET_ADDRSTRLEN);
-
-                  printf("%s,%s,%u,%s,%s\n",
-                       (resp.role == 1) ? "SOURCE" : "DESTINATION",
-                      ip_str, response_port, resp.mac, response_version);
-                fflush(stdout);
             }
+
+            // Evaluate deduplication across the entire combined data snapshot
+            bool is_duplicate = false;
+            for (int i = 0; i < seen_count; i++)
+            {
+                if (seen_records[i].ip == sender_addr.sin_addr.s_addr &&
+                    seen_records[i].port == response_port &&
+                    seen_records[i].role == resp.role &&
+                    seen_records[i].output_flags == output_flags &&
+                    seen_records[i].fifo_path_hash == fifo_path_hash &&
+                    strcmp(seen_records[i].mac, resp.mac) == 0)
+                {
+                    is_duplicate = true;
+                    break;
+                }
+            }
+
+            if (is_duplicate)
+                continue; // Skip identical duplicate records cleanly
+
+            // Save unique dataset entry to the cache register array
+            if (seen_count < MAX_SEEN_PEERS)
+            {
+                seen_records[seen_count].ip = sender_addr.sin_addr.s_addr;
+                seen_records[seen_count].port = response_port;
+                seen_records[seen_count].role = resp.role;
+                seen_records[seen_count].output_flags = output_flags;
+                seen_records[seen_count].fifo_path_hash = fifo_path_hash;
+                snprintf(seen_records[seen_count].mac, sizeof(seen_records[seen_count].mac), "%s", resp.mac);
+                seen_count++;
+            }
+
+            char ip_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &sender_addr.sin_addr, ip_str, INET_ADDRSTRLEN);
+
+            const char *role_name = resp.role == DISCOVER_ROLE_SOURCE ? "SOURCE" : "DESTINATION";
+            printf("%s,%s,%u,%s,%s", role_name, ip_str, response_port, resp.mac, response_version);
+            if (resp.role == DISCOVER_ROLE_DESTINATION)
+            {
+                const char *outputs_name = "NONE";
+                if ((output_flags & (DISCOVER_OUTPUT_SHM | DISCOVER_OUTPUT_PEPPYMETER)) ==
+                    (DISCOVER_OUTPUT_SHM | DISCOVER_OUTPUT_PEPPYMETER))
+                    outputs_name = "SHM+PEPPYMETER";
+                else if (output_flags & DISCOVER_OUTPUT_SHM)
+                    outputs_name = "SHM";
+                else if (output_flags & DISCOVER_OUTPUT_PEPPYMETER)
+                    outputs_name = "PEPPYMETER";
+                printf(",%s", outputs_name);
+            }
+            if (fifo_path)
+            {
+                putchar(',');
+                print_csv_field(fifo_path);
+            }
+            putchar('\n');
+            fflush(stdout);
         }
     }
     close(probe_fd);
@@ -1215,6 +1428,8 @@ int main(int argc, char *argv[])
             server_ip = argv[++i];
         else if (strcmp(argv[i], "--mac") == 0 && i + 1 < argc)
             mac_input = argv[++i];
+        else if (strcmp(argv[i], "--peppymeter-fifo") == 0 && i + 1 < argc)
+            peppymeter_fifo_path = argv[++i];
         else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc)
             port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--fps") == 0 && i + 1 < argc)
@@ -1229,6 +1444,8 @@ int main(int argc, char *argv[])
             forced_proto_version = atoi(argv[++i]);
         else if (strcmp(argv[i], "--remove-shm") == 0)
             keep_shm = false;
+        else if (strcmp(argv[i], "--no-shm-output") == 0)
+            no_shm_output = true;
         else if (strcmp(argv[i], "--stats-int") == 0 && i + 1 < argc)
             stats_int = atoi(argv[++i]);
         else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0)
@@ -1240,12 +1457,14 @@ int main(int argc, char *argv[])
         {
             printf("Squeezelite Replicator v%s\nUsage Options:\n", APP_VERSION);
             printf("  Source Mode:      %s --source [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
-            printf("  Destination Mode: %s --destination --server <source_ip> [--mac <mac_address>] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n\n", argv[0]);
+            printf("  Destination Mode: %s --destination --server <source_ip> [--mac <mac_address>] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--peppymeter-fifo <path>] [--no-shm-output] [--remove-shm] [--stats-int <interval_secs>]\n\n", argv[0]);
             printf("  Discovery Mode:   %s --discover [--discover-timeout <sec>] [--discover-port <p>\n\n", argv[0]);
             printf("Global Flags:\n");
 			printf("  -h, --help        Display this help message\n");
             printf("  -v, --version     Display application version details\n");
             printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
+            printf("  --peppymeter-fifo <path> Destination output to a PeppyMeter FIFO\n");
+            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
             printf("Interactive Controls (does not require Enter):\n");
             printf("  Press 'v'         Version - Display application version details\n");
             printf("  Press 'q'         Quit - Request shutdown\n");
@@ -1264,6 +1483,22 @@ int main(int argc, char *argv[])
     if (mode_count != 1)
     {
         fprintf(stderr, "Specify exactly one mode: --source, --destination, or --discover. %s\n", HELP_HINT);
+        return 1;
+    }
+
+    if (peppymeter_fifo_path && peppymeter_fifo_path[0] == '\0')
+    {
+        fprintf(stderr, "--peppymeter-fifo requires a non-empty FIFO path. %s\n", HELP_HINT);
+        return 1;
+    }
+    if (peppymeter_fifo_path && !is_dest)
+    {
+        fprintf(stderr, "--peppymeter-fifo is only available in destination mode. %s\n", HELP_HINT);
+        return 1;
+    }
+    if (no_shm_output && !is_dest)
+    {
+        fprintf(stderr, "--no-shm-output is only available in destination mode. %s\n", HELP_HINT);
         return 1;
     }
 
@@ -1328,7 +1563,7 @@ int main(int argc, char *argv[])
     if (!disable_discovery_listener)
     {
         int *role_payload = (int *)malloc(sizeof(int));
-        *role_payload = is_source ? 1 : 2;
+        *role_payload = is_source ? DISCOVER_ROLE_SOURCE : DISCOVER_ROLE_DESTINATION;
         disc_thread = create_thread(NULL, discovery_responder_thread, role_payload);
     }
 
