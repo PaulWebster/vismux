@@ -72,6 +72,8 @@
 #define DISCOVER_PORT (DEFAULT_PORT + 1)
 #define DISCOVER_MAGIC "VISMUXv0"
 #define DISCOVER_VERSION_LEN 16
+#define DISCOVER_ROLE_SOURCE 1
+#define DISCOVER_ROLE_DESTINATION 2
 #define DEFAULT_MAC_TIMEOUT 2
 #define SQUEEZELITE_SHM_PREFIX "squeezelite-"
 #define SQUEEZELITE_SHM_PREFIX_LEN (sizeof(SQUEEZELITE_SHM_PREFIX) - 1)
@@ -138,7 +140,7 @@ typedef struct
 {
     char magic[sizeof(DISCOVER_MAGIC)]; // Holds: "VISMUXv0\0"
     uint8_t type;                       // Holds: PACKET_ACK
-    uint8_t role;                       // 1 = SOURCE, 2 = DESTINATION
+    uint8_t role;                       // valid values are DISCOVER_ROLE_SOURCE & DISCOVER_ROLE_DESTINATION
     uint32_t port;                      // Operational data streaming port (e.g. 23483)
     char mac[18];                       // Alphanumeric buffer: "2c:cf:67:82:cc:29\0"
     char version[DISCOVER_VERSION_LEN]; // Application version; absent in legacy responses

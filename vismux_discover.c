@@ -32,9 +32,9 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--source") == 0 ) {
-            role_filter = 1;
+            role_filter = DISCOVER_ROLE_SOURCE;
         } else if (strcmp(argv[i], "--destination") == 0 ) {
-            role_filter = 2;
+            role_filter = DISCOVER_ROLE_DESTINATION;
         } else if (strcmp(argv[i], "--discover-timeout") == 0 && i + 1 < argc) {
             discover_timeout_secs = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--discover-port") == 0 && i + 1 < argc) {

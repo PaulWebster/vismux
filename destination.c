@@ -185,7 +185,7 @@ void run_destination(destination_spec_t* spec)
     hb_thread = create_thread(NULL, heartbeat_loop, hb_ctx);
 
     if (spec->discoverable) {
-        disc_thread = run_discovery_responder(2, spec->mac);
+        disc_thread = run_discovery_responder(DISCOVER_ROLE_DESTINATION, spec->mac);
     }
 
     char rx_window[sizeof(msg_hdr_t) + sizeof(vis_t)];
