@@ -1,5 +1,8 @@
 # === Build Artifacts ===
 vismux
+vismux_destination
+vismux_discover
+vismux_source
 *.o
 *.so
 *.a
