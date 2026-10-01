@@ -47,7 +47,7 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#define APP_VERSION "0.0.9n3"
+#define APP_VERSION "0.0.9n4"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
@@ -64,7 +64,10 @@
 // Discovery Layer Configuration Constants
 #define DISCOVER_PORT (DEFAULT_PORT + 1)
 #define DISCOVER_MAGIC "VISMUXv0"
-#define DISCOVER_VERSION_LEN 16
+#define DISCOVER_VERSION_LEN 16 // Length of version string in discovery response packet - generated as VENDOR_STR-APP_VERSION
+                                // This is a fixed length to allow for future expansion of the discovery protocol without breaking wire compatibility
+                                // If different application using this protocol then make sure that the overall string length does not exceed DISCOVER_VERSION_LEN, otherwise it will be truncated in the discovery response packet
+                                // Increasing this length will break wire compatibility with older versions of the discovery protocol, so only increase if absolutely necessary
 #define DISCOVER_ROLE_SOURCE 1
 #define DISCOVER_ROLE_DESTINATION 2
 #define DISCOVER_OUTPUT_SHM 0x01
@@ -1176,7 +1179,7 @@ void *discovery_responder_thread(void *arg)
                     tx_packet.type = PACKET_ACK;
                     tx_packet.role = (uint8_t)role_id;
                     tx_packet.port = htonl((uint32_t)port);
-                    snprintf(tx_packet.version, sizeof(tx_packet.version), "%s", APP_VERSION);
+                    snprintf(tx_packet.version, sizeof(tx_packet.version), "%s-%s", VENDOR_STR, APP_VERSION);
 
                     // Extract clean mac address from global path allocations
                     char *mac_ptr = strchr(shm_path, '-');
