@@ -33,10 +33,36 @@ TARGET_ARM64   = vismux-aarch64
 TARGET_ARMHF   = vismux-armhf
 TARGET_ARMV6   = vismux-armv6
 
-.PHONY: all clean native nativeosx x86_64 x86-32 aarch64 armhf armv6
+.PHONY: all clean
 
 # Running a bare 'make' compiles the host's native setup
-all: native
+all: native vismux_destination vismux_discover vismux_source
+
+# 0. Native functional targets
+
+# source file dependencies
+vismux_destination.c: vismux.h
+vismux_source.c: vismux.h
+vismux_discover.c: vismux.h
+
+%.o: %.c vismux.h
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -I ./ $< -c
+
+vismux.a: source.o discover.o destination.o console.o common.o
+	ar rcs $(@) $^
+	@echo "[+] Compiled local native static ibrary: $(@)"
+
+vismux_destination: vismux_destination.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+	@echo "[+] Compiled local native binary: $(@)"
+
+vismux_source: vismux_source.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+	@echo "[+] Compiled local native binary: $(@)"
+
+vismux_discover: vismux_discover.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+	@echo "[+] Compiled local native binary: $(@)"
 
 # 1. Native Shorthand Target (Matches current host CPU architecture layout)
 native: vismux.c
@@ -74,4 +100,6 @@ nativeosx: vismux.c
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVEOSX)"
 	
 clean:
-	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6)
+	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6) \
+		vismux_destination vismux_discover vismux_source \
+		*.o *.a
