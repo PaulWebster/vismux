@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--mac") == 0 && i + 1 < argc) {
             mac_input = argv[++i];
         } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            port = atoi(argv[++i]);
+            global_port = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--fps") == 0 && i + 1 < argc) {
             target_fps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {

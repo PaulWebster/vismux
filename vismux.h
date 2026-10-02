@@ -164,19 +164,22 @@ typedef struct {
 typedef struct {
     int role_id;
     char mac[18];
+    int port;
 } discovery_responder_spec_t;
 
 typedef struct {
     int shm_fd;
     int sock_fd;
+    int port;
     vis_t *shm_ptr;
     char shm_path[128];
-    char *mac;
+    char mac[18];
 }destination_context_t;
 
 typedef struct {
     const char* server_ip;
     const char* mac;
+    int port;
     volatile bool keep_running;
     bool  discoverable;
 } destination_spec_t;
@@ -199,14 +202,14 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable);
 void *console_listener_thread(void *arg);
 // returns allocated memory, to be freed by the caller
 discover_records_t* run_discovery_prober(uint8_t role_filter);
-pthread_t* run_discovery_responder(int role_id, const char* mac);
+pthread_t* run_discovery_responder(int role_id, const char* mac, int port);
 
 // global variables defined in vismux_common.c
 extern volatile sig_atomic_t keep_running;
 extern atomic_int log_level;	// Atomic because it can be written to from console_listener_thread and read from other threads
 extern atomic_int force_stats_log;	// Atomic because it can be written to from console_listener_thread and read/reset from other threads
 
-extern int port;
+extern int global_port;
 extern int target_fps;
 extern int stats_int;
 extern int timeout_secs;

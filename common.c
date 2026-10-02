@@ -32,7 +32,7 @@ atomic_int force_stats_log = 0;	// Atomic because it can be written to from cons
 #define STATS_LOG_LEVEL 3
 #define LOG_BUF_SIZE 1024	// Maximum length of single log message
 #define TRUNC_TAG " ... [TRUNCATED]"
-int port = DEFAULT_PORT;
+int global_port = DEFAULT_PORT;
 int target_fps = DEFAULT_FPS;
 int stats_int = DEFAULT_STATS_INTERVAL;
 int timeout_secs = 2;
@@ -225,15 +225,8 @@ static void *discovery_responder_thread(void *arg)
                     memcpy(tx_packet.magic, DISCOVER_MAGIC, sizeof(DISCOVER_MAGIC));
                     tx_packet.type = PACKET_ACK;
                     tx_packet.role = (uint8_t)spec.role_id;
-                    tx_packet.port = htonl((uint32_t)port);
+                    tx_packet.port = htonl((uint32_t)spec.port);
                     snprintf(tx_packet.version, sizeof(tx_packet.version), "%s", APP_VERSION);
-
-//                    // Extract clean mac address from global path allocations
-//                    char *mac_ptr = strchr(shm_path, '-');
-//                    if (mac_ptr)
-//                        snprintf(tx_packet.mac, sizeof(tx_packet.mac), "%s", mac_ptr + 1);
-//                    else
-//                        snprintf(tx_packet.mac, sizeof(tx_packet.mac), "00:00:00:00:00:00");
                     snprintf(tx_packet.mac, sizeof(tx_packet.mac), "%s", spec.mac);
 
                     char target_ip_str[INET_ADDRSTRLEN];
@@ -253,9 +246,10 @@ static void *discovery_responder_thread(void *arg)
     return NULL;
 }
 
-pthread_t* run_discovery_responder(int role_id, const char* mac) {
+pthread_t* run_discovery_responder(int role_id, const char* mac, int port) {
     discovery_responder_spec_t* responder_spec = calloc(1, sizeof(*responder_spec));
     responder_spec->role_id = role_id;
+    responder_spec->port = port;
     strcpy(responder_spec->mac, mac);
     return create_thread(NULL, discovery_responder_thread, responder_spec);
 }

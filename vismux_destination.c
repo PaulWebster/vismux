@@ -46,22 +46,31 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--source") == 0 ) {
-            ARG_AVAIL(2);
+            ARG_AVAIL(1);
             if (ix_dest < (int)(sizeof(specs)/sizeof(specs[0]))) {
-                const char* src_ip = argv[++i];
-                const char* src_mac = argv[++i];
+                char* src_ip = strdup(argv[++i]);
+                specs[ix_dest].server_ip = src_ip; 
+                specs[ix_dest].port = -1;
+                specs[ix_dest].mac = NULL;
+                specs[ix_dest].keep_running = true;
+
+                char *macp = strchr(src_ip, ',');
+                if (macp) {
+                    *macp = '\0';
+                    ++macp;
+                    specs[ix_dest].mac = strdup(macp);
+                }
+                char *portp = strchr(src_ip, ':');
+                if (portp) {
+                    *portp = '\0';
+                    ++portp;
+                    specs[ix_dest].port = atoi(portp);
+                }
                 struct in_addr server_addr;
                 if (inet_pton(AF_INET, src_ip, &server_addr) != 1) {
                     log_msg(-1, "invalid IP address %s", src_ip);
                     exit(EXIT_FAILURE);
                 }
-                if (!validate_mac_spec(src_mac)) {
-                    log_msg(-1, "invalid mac address %s", src_mac);
-                    exit(EXIT_FAILURE);
-                }
-                specs[ix_dest].server_ip = strdup(src_ip);
-                specs[ix_dest].mac = strdup(src_mac);
-                specs[ix_dest].keep_running = true;
                 ++ix_dest;
             } else {
                 log_msg(-1, "too many sources, max sources = %d", (int)(sizeof(specs)/sizeof(specs[0])));
@@ -69,10 +78,7 @@ int main(int argc, char *argv[])
         }
         else if (strcmp(argv[i], "--port") == 0 ) {
             ARG_AVAIL(1);
-            port = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--fps") == 0 ) {
-            ARG_AVAIL(1);
-            target_fps = atoi(argv[++i]);
+            global_port = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--timeout") == 0 ) {
             ARG_AVAIL(1);
             timeout_secs = atoi(argv[++i]);
@@ -90,7 +96,7 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--stats-int") == 0 ) {
             ARG_AVAIL(1);
             stats_int = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--no-discover") == 0) {
+        } else if (strcmp(argv[i], "--not-discoverable") == 0) {
             discoverable = false;
         } else if (strcmp(argv[i], "-z") == 0 || strcmp(argv[i], "--daemonise") == 0) {
             daemonise = true;
@@ -101,6 +107,21 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             printf("vismux version %s\n", APP_VERSION);
             return 0; // Clean exit immediately
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            printf("Squeezelite Replicator Destination v%s\nUsage Options:\n", APP_VERSION);
+            printf("%s  <--source <source_ip>[:port][,mac_address]> ", argv[0]);
+            printf("  [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>]  [--not-discoverable] [--remove-shm] [--stats-int <interval_secs>]\n\n");
+            printf(" --source can be repeated multiple times, once for each source\n");
+            printf("Global Flags:\n");
+            printf("  -h, --help        Display this help message\n");
+            printf("  -v, --version     Display application version details\n");
+            printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
+            printf("Interactive Controls (does not require Enter):\n");
+            printf("  Press 'v'         Version - Display application version details\n");
+            printf("  Press 'q'         Quit - Request shutdown\n");
+            printf("  Press 'l'         Log Level - Cycle log levels dynamically (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)\n");
+            printf("  Press 's'         Stats - Request stats summary on next data reception\n");
+            return 1;
         } else {
             fprintf(stderr, "Unrecognized option: %s. %s\n", argv[i], HELP_HINT);
             return 1;
@@ -143,7 +164,10 @@ int main(int argc, char *argv[])
     for(int ix =0; ix < (int)(sizeof(specs)/sizeof(specs[0])); ++ix) {
         destination_spec_t* spec = specs + ix;
         spec->discoverable = discoverable;
-        if (spec->keep_running && spec->server_ip && spec->mac) {
+        if (spec->port < 0) {
+            spec->port = global_port;
+        }
+        if (spec->keep_running && spec->server_ip) {
             threads[ix] = create_thread(NULL, run_destination_thread, spec);
         }
     }
@@ -151,6 +175,8 @@ int main(int argc, char *argv[])
     for(int ix =0; ix < (int)(sizeof(threads)/sizeof(threads[0])); ++ix) {
         join_thread(threads + ix);
     }
+    log_msg(2, "Terminating no destination threads are running");
+    keep_running = 0;
     join_thread(&ui_thread);
 
     return 0;

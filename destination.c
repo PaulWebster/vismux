@@ -38,10 +38,7 @@ static void release_system_resources(destination_context_t* ctxt)
     if (ctxt->sock_fd != -1)
         close(ctxt->sock_fd);
     log_msg(1, "%s: Destination Engine offline.", ctxt->mac);
-    if (ctxt->mac) {
-        free(ctxt->mac);
-        ctxt->mac = NULL;
-    }
+    ctxt->mac[0] = '\0';
 }
 
 void init_destination_shm(vis_t *shm_ptr)
@@ -144,25 +141,32 @@ void run_destination(destination_spec_t* spec)
     destination_context_t ctxt = {
         .shm_fd = -1,
         .sock_fd = -1,
+        .port = spec->port,
         .shm_ptr = NULL,
+        .mac = {0},
+        .shm_path = {0},
     };
     if (!spec->keep_running) {
         log_msg(-1, "%s spec set to not run", spec->mac);
         return;
     }
-    if (!validate_and_format_mac(spec->mac, ctxt.shm_path, sizeof(ctxt.shm_path))) {
-        log_msg(-1, "Invalid MAC address %s", spec->mac);
+    if (spec->mac) {
+        if (!validate_and_format_mac(spec->mac, ctxt.shm_path, sizeof(ctxt.shm_path))) {
+            log_msg(-1, "Invalid MAC address %s", spec->mac);
+        }
+        snprintf(ctxt.mac, sizeof(ctxt.mac), "%s", spec->mac);
+    } else {
+        ctxt.mac[0] = '\0';
     }
-    ctxt.mac = strdup(spec->mac);
     bool shm_ready = ctxt.shm_path[0] != '\0';
     if (shm_ready && !setup_destination_shm(&ctxt)) {
         exit(EXIT_FAILURE);
     }
 
-    log_msg(2, "%s: Destination Engine Online (%s) expecting data from: %s:%d", ctxt.mac, APP_VERSION, spec->server_ip, port);
+    log_msg(2, "%s: Destination Engine Online (%s) expecting data from: %s:%d", ctxt.mac, APP_VERSION, spec->server_ip, ctxt.port);
 
     ctxt.sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    struct sockaddr_in server_addr = {.sin_family = AF_INET, .sin_port = htons(port)};
+    struct sockaddr_in server_addr = {.sin_family = AF_INET, .sin_port = htons(ctxt.port)};
     inet_pton(AF_INET, spec->server_ip, &server_addr.sin_addr);
 
     struct sockaddr_in local_bound_addr;
@@ -184,8 +188,8 @@ void run_destination(destination_spec_t* spec)
 
     hb_thread = create_thread(NULL, heartbeat_loop, hb_ctx);
 
-    if (spec->discoverable) {
-        disc_thread = run_discovery_responder(DISCOVER_ROLE_DESTINATION, spec->mac);
+    if (spec->discoverable && spec->mac) {
+        disc_thread = run_discovery_responder(DISCOVER_ROLE_DESTINATION, spec->mac, ctxt.port);
     }
 
     char rx_window[sizeof(msg_hdr_t) + sizeof(vis_t)];
@@ -300,12 +304,14 @@ void run_destination(destination_spec_t* spec)
                             first_frame = true;
                             last_network_seq = 0;
                             log_msg(2, "%s: Destination SHM initialized from source MAC: %s", ctxt.mac, response->mac);
-                            free(ctxt.mac);
-                            ctxt.mac = strdup(response->mac);
+                            snprintf(ctxt.mac, sizeof(ctxt.mac), "%s", response->mac);
                         }
                         else
                         {
                             ctxt.shm_path[0] = '\0';
+                        }
+                        if (spec->discoverable) {
+                            disc_thread = run_discovery_responder(DISCOVER_ROLE_DESTINATION, ctxt.mac, ctxt.port);
                         }
                     }
                     else
