@@ -43,6 +43,7 @@ bool wait_for_shm = false;
 bool has_interactive_tty = false;	// set in main
 int discover_timeout_secs = 2;
 int discover_port = DISCOVER_PORT; // Overridable runtime discovery port descriptor
+int discover_format = 0;
 
 // Allocate pthread_t struct, and creates a thread
 // Returns  pointer to pthread_t or  NULL if memory allocation or thread creation failed
@@ -226,7 +227,7 @@ static void *discovery_responder_thread(void *arg)
                     tx_packet.type = PACKET_ACK;
                     tx_packet.role = (uint8_t)spec.role_id;
                     tx_packet.port = htonl((uint32_t)spec.port);
-                    snprintf(tx_packet.version, sizeof(tx_packet.version), "%s", APP_VERSION);
+                    snprintf(tx_packet.version, sizeof(tx_packet.version), "%s-%s", VENDOR_STR, APP_VERSION);
                     snprintf(tx_packet.mac, sizeof(tx_packet.mac), "%s", spec.mac);
 
                     char target_ip_str[INET_ADDRSTRLEN];

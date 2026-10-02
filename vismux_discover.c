@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
                 inet_ntop(AF_INET, &discovery->records[ix].ip, ip_str, INET_ADDRSTRLEN);
 
                 printf("type:%s, IP address:%s, port:%u, MAC address:%s, version: %s\n",
-                    (discovery->records[ix].role == 1) ? "SOURCE" : "DESTINATION",
+                    (discovery->records[ix].role == DISCOVER_ROLE_SOURCE) ? "SOURCE" : "DESTINATION",
                     ip_str,
                     discovery->records[ix].port,
                     discovery->records[ix].mac,

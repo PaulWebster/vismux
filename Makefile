@@ -8,7 +8,7 @@ CFLAGS_COMMON = -Wall -Wextra -O3 -pthread -D_FILE_OFFSET_BITS=64
 
 # Target-Specific Variable Extensions
 CFLAGS_NAT     = 
-CFLAGS_NATOSX  = -DNOELF
+CFLAGS_NATOSX  = -DNODAEMON
 CFLAGS_INTEL64 = 
 CFLAGS_INTEL32 = 
 CFLAGS_INTEL32_OLD = -m32
@@ -44,6 +44,7 @@ all: native vismux_destination vismux_discover vismux_source
 vismux_destination.c: vismux.h
 vismux_source.c: vismux.h
 vismux_discover.c: vismux.h
+vismux.c: vismux.h
 
 %.o: %.c vismux.h
 	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -I ./ $< -c
@@ -65,8 +66,8 @@ vismux_discover: vismux_discover.c vismux.a
 	@echo "[+] Compiled local native binary: $(@)"
 
 # 1. Native Shorthand Target (Matches current host CPU architecture layout)
-native: vismux.c
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $< -o $(TARGET_NATIVE) $(LIBS)
+native: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(TARGET_NATIVE) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVE)"
 
 # 2. Intel/AMD 64-bit Explicit Target
@@ -95,8 +96,8 @@ armv6: vismux.c
 	@echo "[+] Cross-compiled ARMv6 (Pi Zero/1) binary: $(TARGET_ARMV6)"
 
 # 7. native on OSX
-nativeosx: vismux.c
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NATOSX) $< -o $(TARGET_NATIVEOSX) $(LIBSOSX)
+nativeosx: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NATOSX) -o $(TARGET_NATIVEOSX) $^ $(LIBSOSX)
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVEOSX)"
 	
 clean:

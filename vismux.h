@@ -50,7 +50,7 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
-#define APP_VERSION "0.0.9l"
+#define APP_VERSION "0.0.9lp2"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
@@ -71,7 +71,10 @@
 // Discovery Layer Configuration Constants
 #define DISCOVER_PORT (DEFAULT_PORT + 1)
 #define DISCOVER_MAGIC "VISMUXv0"
-#define DISCOVER_VERSION_LEN 16
+#define DISCOVER_VERSION_LEN 16 // Length of version string in discovery response packet - generated as VENDOR_STR-APP_VERSION
+                                // This is a fixed length to allow for future expansion of the discovery protocol without breaking wire compatibility
+                                // If different application using this protocol then make sure that the overall string length does not exceed DISCOVER_VERSION_LEN, otherwise it will be truncated in the discovery response packet
+                                // Changing this length will break wire compatibility with older versions of the discovery protocol, so only increase if absolutely necessary
 #define DISCOVER_ROLE_SOURCE 1
 #define DISCOVER_ROLE_DESTINATION 2
 #define DEFAULT_MAC_TIMEOUT 2
@@ -220,4 +223,5 @@ extern bool wait_for_shm;
 extern bool has_interactive_tty;
 extern int discover_timeout_secs;
 extern int discover_port;
+extern int discover_format;
 #endif // __vismux_h_

@@ -340,7 +340,7 @@ void run_destination(destination_spec_t* spec)
             last_success_packet_time = now_check;
             if (was_connection_logged_down)
             {
-                log_msg(1, "%d: Connection re-established.", ctxt.mac);
+                log_msg(1, "%s: Connection re-established.", ctxt.mac);
                 was_connection_logged_down = false;
             }
             total_received_frames++;
