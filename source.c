@@ -66,7 +66,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
     ctxt.sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
     fcntl(ctxt.sock_fd, F_SETFL, O_NONBLOCK);
 
-    struct sockaddr_in server_addr = {.sin_family = AF_INET, .sin_port = htons(port), .sin_addr.s_addr = INADDR_ANY};
+    struct sockaddr_in server_addr = {.sin_family = AF_INET, .sin_port = htons(global_port), .sin_addr.s_addr = INADDR_ANY};
     if (bind(ctxt.sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)))
     {
         log_msg(1, "port %d is already in use! ", (int)server_addr.sin_port);
@@ -88,7 +88,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
     char net_buf[sizeof(msg_hdr_t) + sizeof(vis_t)];
     pthread_t* disc_thread = NULL;
     if (discoverable) {
-        disc_thread = run_discovery_responder(DISCOVER_ROLE_SOURCE, mac);
+        disc_thread = run_discovery_responder(DISCOVER_ROLE_SOURCE, mac, global_port);
     }
 
     while (keep_running)
