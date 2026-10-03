@@ -133,6 +133,7 @@ pcp br
 - `--mac <mac_address>` Squeezelite MAC address
 - `--port <p>`          Override the operational UDP data streaming port (default **`23483`**).
 - `--wait-for-shm`      *(Source Only)* If no Squeezelite visualizer segment is found, keep polling `/dev/shm` until one appears. Without this option, source mode exits with an error.
+- `--wait-for-source`   *(Destination Only)* If no sources specified and none automatically discovered then wait until one appears. Without this option, destination mode exits if no sources.
 - `--mac-timeout <sec>` *(Destination Only)* Time to wait for a valid source MAC before rotating the subscription port (default **`2`** seconds).
 - `--log-level <0-3>`   Filter verbosity outputs (0=ERROR, 1=WARN, 2=INFO, 3=DEBUG). Info level is verbose on Destination so, once working, reduce the level or increase the stats interval.
 - `--stats-int`        *(Destination Only)* Set the interval in seconds between "Processing updates" statistics log messages in Debug level (default **`10`**).

@@ -28,14 +28,16 @@
 char shm_path[128] = {0};
 char global_mac[18] = {0};
 
-// For --discover
+// For discovery (--discover and --destination)
 #define SLOT_COUNT  16
 static destination_spec_t specs[SLOT_COUNT];
 static pthread_t* threads[SLOT_COUNT];
 
 // For --source
 bool no_shm_output = false; // *** need to pass to run_source ***
+bool wait_for_source = false;   // If running in destination mode but no sources configured or discovered then wait for one to appear
 
+// For --source
 int find_squeezelite_shm(void)
 {
     DIR *shm_dir = opendir("/dev/shm");
@@ -86,6 +88,8 @@ int find_squeezelite_shm(void)
     return 0;
 }
 
+
+// for --source
 bool resolve_source_shm(void)
 {
     for (;;)
@@ -120,7 +124,6 @@ bool resolve_source_shm(void)
 int main(int argc, char *argv[])
 {
     bool is_source = false, is_dest = false, is_discover = false;
-//    char *server_ip = NULL;
     char *mac_input = NULL;
     char *peppymeter_fifo_path = NULL;
     bool disable_discovery_listener = false;
@@ -129,6 +132,7 @@ int main(int argc, char *argv[])
     const char* logfile = NULL;
     uint8_t role_filter = 0;
     bool discoverable = true;
+
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
     signal(SIGHUP, handle_signal);
@@ -161,8 +165,8 @@ int main(int argc, char *argv[])
             discover_format = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--wait-for-shm") == 0) {
             wait_for_shm = true;
-//        } else if (strcmp(argv[i], "--server") == 0 && i + 1 < argc) {
-//            server_ip = argv[++i];
+        } else if (strcmp(argv[i], "--wait-for-source") == 0) {
+            wait_for_source = true;
         } else if (strcmp(argv[i], "--server") == 0 ) {
             ARG_AVAIL(1);
             if (ix_dest < (int)(sizeof(specs)/sizeof(specs[0]))) {
@@ -238,7 +242,8 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Squeezelite Replicator v%s\nUsage Options:\n", APP_VERSION);
             printf("  Source Mode:      %s --source [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
-            printf("  Destination Mode: %s --destination --server <source_ip>[:<source_port>][,<mac_address>] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--no-shm-output] [--remove-shm] [--stats-int <interval_secs>]\n\n", argv[0]);
+            printf("  Destination Mode: %s --destination [--server <source_ip>[:<source_port>][,<mac_address>]] [--wait-for-source] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+            printf("    --server can be repeated multiple times, once for each source\n");
             printf("  Discovery Mode:   %s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n\n", argv[0]);
             printf("Global Flags:\n");
 			printf("  -h, --help        Display this help message\n");
@@ -248,7 +253,7 @@ int main(int argc, char *argv[])
 #endif  // NODAEMON
             printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
 //            printf("  --peppymeter-fifo <path> Destination output to a PeppyMeter FIFO\n");
-            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
+//            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
             printf("  --discover-format <fmt> 0=simple csv, 1=titles in csv\n");
             printf("\nInteractive Controls (does not require Enter):\n");
             printf("  Press 'v'         Version - Display application version details\n");
@@ -279,11 +284,11 @@ int main(int argc, char *argv[])
         fprintf(stderr, "--peppymeter-fifo is only available in destination mode. %s\n", HELP_HINT);
         return 1;
     }
-    if (no_shm_output && !is_dest)
-    {
-        fprintf(stderr, "--no-shm-output is only available in destination mode. %s\n", HELP_HINT);
-        return 1;
-    }
+//    if (no_shm_output && !is_dest)
+//    {
+//        fprintf(stderr, "--no-shm-output is only available in destination mode. %s\n", HELP_HINT);
+//        return 1;
+//    }
 
     if (is_discover)
     {
@@ -331,12 +336,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (is_dest && ix_dest ==0)
-    {
-        fprintf(stderr, "Destination mode requires --server <source_ip>. %s\n", HELP_HINT);
-        return 1;
-    }
-
+//    if (is_dest && ix_dest ==0)
+//    {
+//        fprintf(stderr, "Destination mode requires --server <source_ip>. %s\n", HELP_HINT);
+//        return 1;
+//    }
+//
     if (stats_int < 1)
     {
         fprintf(stderr, "--stats-int must be numbers only and greater than or equal to 1. %s\n", HELP_HINT);
@@ -394,8 +399,47 @@ int main(int argc, char *argv[])
     {
         run_source(shm_path, mac_input, !disable_discovery_listener);
     }
-    else if (is_dest && ix_dest > 0)
+    else if (is_dest)
     {
+        if (ix_dest == 0) {
+            log_msg(-1, "No sources specified, using discovery to add sources.");
+            while (keep_running)
+            {
+                discover_records_t* discovery  = run_discovery_prober(DISCOVER_ROLE_SOURCE);
+                for (int ix = 0; ix < discovery->count; ++ix) {
+                    destination_spec_t* spec = specs + ix_dest;
+                    peer_record_t* peer = discovery->records +ix;
+                    char peer_ipaddr_str[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &peer->ip, peer_ipaddr_str, sizeof(peer_ipaddr_str));
+                    switch(is_ipaddr_local(peer->ip)){
+                        case -1:
+                            log_msg(-1, "Unable to retrieve local IP addresses");
+                            exit(EXIT_FAILURE);
+                            break;
+                        case 0:
+                            log_msg(-1, "Ignoring local source : %s:%d MAC:%s", peer_ipaddr_str, (int)peer->port, peer->mac);
+                            break;
+                        case 1:
+                            spec->keep_running = true;
+                            spec->port = peer->port;
+                            spec->mac = strdup(peer->mac);
+                            spec->server_ip = strdup(peer_ipaddr_str);
+                            inet_ntop(AF_INET, &peer->ip, (char *)spec->server_ip, INET_ADDRSTRLEN);
+                            log_msg(-1, "Adding remote source  : %s:%d MAC:%s", spec->server_ip, (int)spec->port, spec->mac);
+                            ++ix_dest;
+                            break;
+                    }
+                }
+                
+                if (ix_dest == 0 && wait_for_source) {
+                    log_msg(3, "No remote sources discovered");
+                    sleep(2);
+                } else {
+                    break;
+                }
+            }
+        }
+
         for(int ix =0; ix < (int)(sizeof(specs)/sizeof(specs[0])); ++ix) {
             destination_spec_t* spec = specs + ix;
             spec->discoverable = discoverable;
