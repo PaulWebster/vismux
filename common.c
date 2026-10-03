@@ -254,3 +254,28 @@ pthread_t* run_discovery_responder(int role_id, const char* mac, int port) {
     strcpy(responder_spec->mac, mac);
     return create_thread(NULL, discovery_responder_thread, responder_spec);
 }
+
+int is_ipaddr_local(const uint32_t s_addr) {
+    struct ifaddrs* ifaddr;
+    // default to not local IP address
+    bool rv = 1;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        log_msg(-1, "getifaddrs() failed: %s", strerror(errno));
+        return -1;
+    }
+
+    for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) { continue; }
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            if (s_addr == ((struct sockaddr_in*)ifa->ifa_addr)->sin_addr.s_addr) {
+                // IP address is local
+                rv = 0;
+                break;
+            }
+        }
+    }
+    freeifaddrs(ifaddr);
+
+    return rv;
+}

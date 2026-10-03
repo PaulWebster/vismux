@@ -158,9 +158,35 @@ int main(int argc, char *argv[])
     puts("");
     fflush(stdout);
 
-//    if (ix_dest) {
-//        run_destination(specs + 0);
-//    }
+    if (ix_dest == 0) {
+        log_msg(-1, "No sources specified, using discovery to add sources.");
+        discover_records_t* discovery  = run_discovery_prober(DISCOVER_ROLE_SOURCE);
+        for (int ix = 0; ix < discovery->count; ++ix) {
+            destination_spec_t* spec = specs + ix_dest;
+            peer_record_t* peer = discovery->records +ix;
+            char peer_ipaddr_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &peer->ip, peer_ipaddr_str, sizeof(peer_ipaddr_str));
+            switch(is_ipaddr_local(peer->ip)){
+                case -1:
+                    log_msg(-1, "Unable to retrieve local IP addresses");
+                    exit(EXIT_FAILURE);
+                    break;
+                case 0:
+                    log_msg(-1, "Ignoring local source : %s:%d MAC:%s", peer_ipaddr_str, (int)peer->port, peer->mac);
+                    break;
+                case 1:
+                    spec->keep_running = true;
+                    spec->port = peer->port;
+                    spec->mac = strdup(peer->mac);
+                    spec->server_ip = strdup(peer_ipaddr_str);
+                    inet_ntop(AF_INET, &peer->ip, (char *)spec->server_ip, INET_ADDRSTRLEN);
+                    log_msg(-1, "Adding remote source  : %s:%d MAC:%s", spec->server_ip, (int)spec->port, spec->mac);
+                    ++ix_dest;
+                    break;
+            }
+        }
+    }
+
     for(int ix =0; ix < (int)(sizeof(specs)/sizeof(specs[0])); ++ix) {
         destination_spec_t* spec = specs + ix;
         spec->discoverable = discoverable;
