@@ -50,6 +50,9 @@
 #include <dirent.h>
 #include <stdatomic.h>
 
+#include<netdb.h>
+#include<ifaddrs.h>
+
 #define APP_VERSION "0.0.9lp2"
 #define VENDOR_STR "VISMUX"
 
@@ -206,6 +209,8 @@ void *console_listener_thread(void *arg);
 // returns allocated memory, to be freed by the caller
 discover_records_t* run_discovery_prober(uint8_t role_filter);
 pthread_t* run_discovery_responder(int role_id, const char* mac, int port);
+
+int is_ipaddr_local(const uint32_t s_addr);
 
 // global variables defined in vismux_common.c
 extern volatile sig_atomic_t keep_running;
