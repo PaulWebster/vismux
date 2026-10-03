@@ -1,4 +1,5 @@
 CC = gcc
+AR = ar
 # Used to have -lrt (librt.so) but not needed with modern glibc
 LIBS = 
 LIBSOSX = 
@@ -16,9 +17,13 @@ CFLAGS_INTEL32_OLD = -m32
 # ARM Cross-Compilers & Architecture Tuning Flags
 # (Requires: sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu)
 INTEL32_CC    = i686-linux-gnu-gcc
+INTEL32_AR    = i686-linux-gnu-ar
 ARM64_CC      = aarch64-linux-gnu-gcc
+ARM64_AR      = aarch64-linux-gnu-ar
 ARM32_CC      = arm-linux-gnueabihf-gcc
+ARM32_AR      = arm-linux-gnueabihf-ar
 ARM32V6_CC    = armv6-linux-musleabihf-gcc
+ARM32V6_AR    = armv6-linux-musleabihf-ar
 CFLAGS_ARM64  = -march=armv8-a
 CFLAGS_ARMHF  = -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard
 # Use -static for ARMV6 because being built with mus library which might not be on target system
@@ -28,12 +33,31 @@ CFLAGS_ARMV6  = -march=armv6 -static -marm -mfpu=vfp -mfloat-abi=hard
 TARGET_NATIVE  = vismux
 TARGET_NATIVEOSX  = vismux-osx
 TARGET_X86_64  = vismux-x86_64
-TARGET_X86_32  = vismux-x86-32
+TARGET_X86_32  = vismux-x86_32
 TARGET_ARM64   = vismux-aarch64
 TARGET_ARMHF   = vismux-armhf
 TARGET_ARMV6   = vismux-armv6
 
-.PHONY: all clean
+CROSS_ARCHES = x86_64 x86_32 aarch64 armhf armv6
+CROSS_EXECUTABLES = $(foreach arch,$(CROSS_ARCHES),vismux-$(arch) vismux_destination-$(arch) vismux_discover-$(arch) vismux_source-$(arch))
+
+CROSS_CC_x86_64 = $(CC)
+CROSS_AR_x86_64 = $(AR)
+CROSS_CFLAGS_x86_64 = $(CFLAGS_INTEL64)
+CROSS_CC_x86_32 = $(INTEL32_CC)
+CROSS_AR_x86_32 = $(INTEL32_AR)
+CROSS_CFLAGS_x86_32 = $(CFLAGS_INTEL32)
+CROSS_CC_aarch64 = $(ARM64_CC)
+CROSS_AR_aarch64 = $(ARM64_AR)
+CROSS_CFLAGS_aarch64 = $(CFLAGS_ARM64)
+CROSS_CC_armhf = $(ARM32_CC)
+CROSS_AR_armhf = $(ARM32_AR)
+CROSS_CFLAGS_armhf = $(CFLAGS_ARMHF)
+CROSS_CC_armv6 = $(ARM32V6_CC)
+CROSS_AR_armv6 = $(ARM32V6_AR)
+CROSS_CFLAGS_armv6 = $(CFLAGS_ARMV6)
+
+.PHONY: all clean $(CROSS_ARCHES)
 
 # Running a bare 'make' compiles the host's native setup
 all: native vismux_destination vismux_discover vismux_source
@@ -70,30 +94,30 @@ native: vismux.c vismux.a
 	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(TARGET_NATIVE) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVE)"
 
-# 2. Intel/AMD 64-bit Explicit Target
-x86_64: vismux.c
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL64) $< -o $(TARGET_X86_64) $(LIBS)
-	@echo "[+] Compiled Intel/AMD 64-bit binary: $(TARGET_X86_64)"
+define CROSS_BUILD
+$(1)-%.o: %.c vismux.h
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
 
-# 3. Intel x86 32-bit Target
-x86-32: vismux.c
-	$(INTEL32_CC) $(CFLAGS_COMMON) $(CFLAGS_INTEL32) $< -o $(TARGET_X86_32) $(LIBS)
-	@echo "[+] Compiled Intel 32-bit binary: $(TARGET_X86_32)"
+vismux-$(1).a: $(addprefix $(1)-,source.o discover.o destination.o console.o common.o)
+	$$(CROSS_AR_$(1)) rcs $$@ $$^
 
-# 4. ARM 64-bit Explicit Target (Raspberry Pi 3/4/5 running 64-bit OS)
-aarch64: vismux.c
-	$(ARM64_CC) $(CFLAGS_COMMON) $(CFLAGS_ARM64) $< -o $(TARGET_ARM64) $(LIBS)
-	@echo "[+] Cross-compiled ARM 64-bit (AArch64) binary: $(TARGET_ARM64)"
+vismux-$(1): $(1)-vismux.o vismux-$(1).a
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
-# 5. ARMhf 32-bit Target (Raspberry Pi 2/3/4 running legacy 32-bit OS)
-armhf: vismux.c
-	$(ARM32_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMHF) $< -o $(TARGET_ARMHF) $(LIBS)
-	@echo "[+] Cross-compiled ARMhf (v7) binary: $(TARGET_ARMHF)"
+vismux_destination-$(1): $(1)-vismux_destination.o vismux-$(1).a
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
-# 6. ARMv6 32-bit Target (Raspberry Pi 1 & Raspberry Pi Zero Classic)
-armv6: vismux.c
-	$(ARM32V6_CC) $(CFLAGS_COMMON) $(CFLAGS_ARMV6) $< -o $(TARGET_ARMV6) $(LIBS)
-	@echo "[+] Cross-compiled ARMv6 (Pi Zero/1) binary: $(TARGET_ARMV6)"
+vismux_discover-$(1): $(1)-vismux_discover.o vismux-$(1).a
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
+
+vismux_source-$(1): $(1)-vismux_source.o vismux-$(1).a
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
+
+$(1): vismux-$(1) vismux_destination-$(1) vismux_discover-$(1) vismux_source-$(1)
+	@echo "[+] Compiled all $(1) binaries"
+endef
+
+$(foreach arch,$(CROSS_ARCHES),$(eval $(call CROSS_BUILD,$(arch))))
 
 # 7. native on OSX
 nativeosx: vismux.c vismux.a
@@ -101,6 +125,6 @@ nativeosx: vismux.c vismux.a
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVEOSX)"
 	
 clean:
-	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6) \
+	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6) $(CROSS_EXECUTABLES) \
 		vismux_destination vismux_discover vismux_source \
 		*.o *.a

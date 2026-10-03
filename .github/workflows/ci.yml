@@ -5,13 +5,17 @@ on:
     branches: [ main, master ]
     tags: [ 'v*' ]
     paths:
-      - 'vismux.c'
+      - '*.c'
+      - 'vismux.h'
       - 'Makefile'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main, master ]
     paths:
-      - 'vismux.c'
+      - '*.c'
+      - 'vismux.h'
       - 'Makefile'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,7 +35,7 @@ jobs:
         # Enable the 32-bit x86 (i386) architecture pool
         sudo dpkg --add-architecture i386
         sudo apt-get update
-        # exclude gcc-multilib - usually required for x86-32 (-m32) compiles but causes dependency conflict
+        # exclude gcc-multilib - usually required for x86_32 (-m32) compiles but causes dependency conflict
         # gcc-arm-linux-gnueabihf targets armhf and armv6 cross-compilation
         # gcc-aarch64-linux-gnu targets arm64 cross-compilation
         sudo apt-get install -y \
@@ -54,7 +58,7 @@ jobs:
 
     - name: Verify Native Architecture Binary Compilation
       run: |
-        make native
+        make all
 
     - name: Verify Explicit Intel/AMD 64-bit Binary Compilation
       run: |
@@ -62,7 +66,7 @@ jobs:
 
     - name: Verify Explicit Intel x86 32-bit Binary Compilation
       run: |
-        make x86-32
+        make x86_32
 
     - name: Verify Cross-Compiled ARM 64-bit (AArch64) Binary Compilation
       run: |
@@ -78,20 +82,25 @@ jobs:
 
     - name: Verify Binary Headers using Kernel File Inspector
       run: |
-        # Logs binary header properties to confirm layout separation
-        file vismux
-        file vismux-x86_64
-        file vismux-x86-32
-        file vismux-aarch64
-        file vismux-armhf
-        file vismux-armv6
+        for target in native x86_64 x86_32 aarch64 armhf armv6; do
+          if [ "$target" = native ]; then
+            suffix=""
+          else
+            suffix="-$target"
+          fi
+          for binary in vismux vismux_destination vismux_discover vismux_source; do
+            file "${binary}${suffix}"
+          done
+        done
 
     - name: Verify Executable Execution Bounds (Intel Platforms Only)
       run: |
         # Validates that native x86-compatible targets boot cleanly in this runner
-        ./vismux --version
-        ./vismux-x86_64 --version
-        ./vismux-x86-32 --version
+        for target in "" -x86_64 -x86_32; do
+          for binary in vismux vismux_destination vismux_source; do
+            "./${binary}${target}" --version
+          done
+        done
 
     # =========================================================================
     # PACKAGING PHASE (Runs every time so you can download and test archives)
@@ -101,13 +110,14 @@ jobs:
         mkdir -p release
         # Do not include "native" in packaging. The compilation section verifies that it compiles but no need to publish
         # since it is for end-users to compile their own
-        for target in x86_64 x86-32 aarch64 armhf armv6; do
-          case "$target" in
-            native) binary="vismux" ;;
-            *) binary="vismux-$target" ;;
-          esac
+        for target in x86_64 x86_32 aarch64 armhf armv6; do
           archive="vismux-${GITHUB_REF_NAME}-${target}.tar.gz"
-          tar -czf "release/$archive" "$binary" README.md LICENSE systemd
+          tar -czf "release/$archive" \
+            "vismux-$target" \
+            "vismux_destination-$target" \
+            "vismux_discover-$target" \
+            "vismux_source-$target" \
+            README.md LICENSE systemd
         done
         sha256sum release/* > release/SHA256SUMS
 
