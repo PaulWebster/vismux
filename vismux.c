@@ -25,30 +25,30 @@
  ****************************************************************/
 #include "vismux.h"
 
-#if !defined(MOD_ALL) && !defined(MOD_DISC) && !defined(MOD_SRC) && !defined(MOD_DEST)
-#define MOD_ALL
+#if !defined(VISMUX_ALL) && !defined(VISMUX_DISC) && !defined(VISMUX_SRC) && !defined(VISMUX_DEST)
+#define VISMUX_ALL
 #endif
-#if (defined(MOD_ALL) + defined(MOD_DISC) + defined(MOD_SRC) + defined(MOD_DEST)) != 1
-#error "Define exactly one of MOD_ALL, MOD_DISC, MOD_SRC, or MOD_DEST"
+#if (defined(VISMUX_ALL) + defined(VISMUX_DISC) + defined(VISMUX_SRC) + defined(VISMUX_DEST)) != 1
+#error "Define exactly one of VISMUX_ALL, VISMUX_DISC, VISMUX_SRC, or VISMUX_DEST"
 #endif
 
 char shm_path[128] = {0};
 char global_mac[18] = {0};
 
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
 #define SLOT_COUNT  16
 static destination_spec_t specs[SLOT_COUNT];
-#if defined(MOD_DEST) || defined(MOD_ALL)
 // For discovery (--discover and --destination)
 static pthread_t* threads[SLOT_COUNT];
 #endif
 
 
-#if defined(MOD_DEST) || defined(MOD_ALL)
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
 // For --destination
 bool no_shm_output = false; // *** need to pass to run_source ***
 bool wait_for_source = false;   // If running in destination mode but no sources configured or discovered then wait for one to appear
-#endif /* MOD_DEST || MOD_ALL */
-#if defined(MOD_SRC) || defined(MOD_ALL)
+#endif /* VISMUX_DEST || VISMUX_ALL */
+#if defined(VISMUX_SRC) || defined(VISMUX_ALL)
 // For --source
 int find_squeezelite_shm(void)
 {
@@ -131,19 +131,19 @@ bool resolve_source_shm(void)
         }
     }
 }
-#endif /* MOD_SRC || MOD_ALL */
+#endif /* VISMUX_SRC || VISMUX_ALL */
 
 
 int main(int argc, char *argv[])
 {
     bool is_source = false, is_dest = false, is_discover = false;
-    #ifdef MOD_SRC
+    #ifdef VISMUX_SRC
         is_source = true;
     #endif
-    #ifdef MOD_DEST
+    #ifdef VISMUX_DEST
         is_dest = true;
     #endif
-    #ifdef MOD_DISC
+    #ifdef VISMUX_DISC
         is_discover = true;
     #endif
    
@@ -152,11 +152,12 @@ int main(int argc, char *argv[])
     bool disable_discovery_listener = false;
     (void)disable_discovery_listener;  /* usage might be removed by #ifdef so avoid compilation problem */
     int ix_dest = 0;
+    (void)ix_dest;  /* usage might be removed by #ifdef so avoid compilation problem */
     bool daemonise = false;
     const char* logfile = NULL;
     uint8_t role_filter = 0;
     (void)role_filter;  /* usage might be removed by #ifdef so avoid compilation problem */
-#if defined(MOD_DEST) || defined(MOD_ALL)
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
     bool discoverable = true;
 #endif
 
@@ -167,7 +168,7 @@ int main(int argc, char *argv[])
 #define ARG_AVAIL(n)  if ((i +n) >= argc) { fprintf(stderr, "invalid commandline"); exit(EXIT_FAILURE); }
     for (int i = 1; i < argc; i++)
     {
-#if !defined(MOD_SRC) && !defined(MOD_DEST) && !defined(MOD_DISC)
+#ifdef VISMUX_ALL
         if (strcmp(argv[i], "--source") == 0) {
             is_source = true;
         } else if (strcmp(argv[i], "--destination") == 0) {
@@ -178,13 +179,17 @@ int main(int argc, char *argv[])
 #endif
         if (strcmp(argv[i], "--no-discover") == 0) {
             disable_discovery_listener = true;
-        } else if (strcmp(argv[i], "--discover-source") == 0 ) {
+        } else 
+#ifdef VISMUX_DISC
+        if (strcmp(argv[i], "--discover-source") == 0 ) {
             role_filter = DISCOVER_ROLE_SOURCE;
             is_discover = true;
         } else if (strcmp(argv[i], "--discover-destination") == 0 ) {
             role_filter = DISCOVER_ROLE_DESTINATION;
             is_discover = true;
-        } else if (strcmp(argv[i], "--discover-timeout") == 0 && i + 1 < argc) {
+        } else 
+#endif
+        if (strcmp(argv[i], "--discover-timeout") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             discover_timeout_secs = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--discover-port") == 0 && i + 1 < argc) {
@@ -196,11 +201,12 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--wait-for-shm") == 0) {
             wait_for_shm = true;
         } else 
-#if defined(MOD_DEST) || defined(MOD_ALL)
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
             if (strcmp(argv[i], "--wait-for-source") == 0) {
             wait_for_source = true;
         } else 
 #endif
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
         if (strcmp(argv[i], "--server") == 0 ) {
             ARG_AVAIL(1);
             if (ix_dest < (int)(sizeof(specs)/sizeof(specs[0]))) {
@@ -231,7 +237,9 @@ int main(int argc, char *argv[])
             } else {
                 log_msg(-1, "too many sources, max sources = %d", (int)(sizeof(specs)/sizeof(specs[0])));
             }
-        } else if (strcmp(argv[i], "--mac") == 0 && i + 1 < argc) {
+        } else 
+#endif /* VISMUX_DEST || VISMUX_ALL */
+        if (strcmp(argv[i], "--mac") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             mac_input = argv[++i];
         } else if (strcmp(argv[i], "--peppymeter-fifo") == 0 && i + 1 < argc) {
@@ -251,22 +259,26 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--log-level") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             log_level = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--proto-version") == 0 && i + 1 < argc) {
+        } else 
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
+        if (strcmp(argv[i], "--proto-version") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             forced_proto_version = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--remove-shm") == 0) {
             keep_shm = false;
 //        } else if (strcmp(argv[i], "--no-shm-output") == 0) {
 //            no_shm_output = true;
-        } else if (strcmp(argv[i], "--stats-int") == 0 && i + 1 < argc) {
+        } else
+#endif /* VISMUX_DEST || VISMUX_ALL*/
+        if (strcmp(argv[i], "--stats-int") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             stats_int = atoi(argv[++i]);
         } 
-#ifndef NODAEMON    // Only if daemonisation is not disabled (not available on macOS)
+#if !defined NODAEMON && !defined VISMUX_DISC  // Only if daemonisation is not disabled (not available on macOS)
             else if (strcmp(argv[i], "-z") == 0 || strcmp(argv[i], "--daemonise") == 0) {
                 daemonise = true;
         }
-#endif  // NODAEMON
+#endif  // !NODAEMON && !VISMUX_DISC
             else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--logfile") == 0) {
             ARG_AVAIL(1);
             logfile = argv[++i];
@@ -275,25 +287,44 @@ int main(int argc, char *argv[])
             return 0; // Clean exit immediately
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Squeezelite Replicator v%s\nUsage Options:\n", APP_VERSION);
+#ifdef VISMUX_ALL
             printf("  Source Mode:      %s --source [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
+#elif defined VISMUX_SRC
+            printf("  %s [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
+#endif
+#ifdef VISMUX_ALL
             printf("  Destination Mode: %s --destination [--server <source_ip>[:<source_port>][,<mac_address>]] [--wait-for-source] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+#elif defined VISMUX_DEST
+            printf("  %s [--server <source_ip>[:<source_port>][,<mac_address>]] [--wait-for-source] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+#endif
+#if defined VISMUX_DEST || defined VISMUX_ALL
             printf("    --server can be repeated multiple times, once for each source\n");
-            printf("  Discovery Mode:   %s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n\n", argv[0]);
-            printf("Global Flags:\n");
+#endif
+#ifdef VISMUX_ALL
+            printf("  Discovery Mode:   %s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
+#elif defined VISMUX_DISC
+            printf("%s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
+#endif
+#if defined VISMUX_DISC || defined VISMUX_ALL
+            printf("    --discover-source and  --discover-destination provide filtering of the discovery result\n");
+            printf("    --discover-format <fmt> 0=simple csv, 1=titles in csv\n");
+#endif
+            printf("\nGlobal Flags:\n");
 			printf("  -h, --help        Display this help message\n");
             printf("  -v, --version     Display application version details\n");
-#ifndef NODAEMON    // Only if daemonisation is not disabled (not available on macOS)
+#if !defined NODAEMON && !defined VISMUX_DISC   // Only if daemonisation is not disabled (not available on macOS)
             printf("  -z, --daemonise   Detach from terminal to run in background (daemon)\n");
-#endif  // NODAEMON
-            printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
+#endif  // !NODAEMON && !VISMUX_DISC
+            printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n");
 //            printf("  --peppymeter-fifo <path> Destination output to a PeppyMeter FIFO\n");
 //            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
-            printf("  --discover-format <fmt> 0=simple csv, 1=titles in csv\n");
-            printf("\nInteractive Controls (does not require Enter):\n");
+#ifndef VISMUX_DISC
+            printf("\nInteractive Controls (Enter not required):\n");
             printf("  Press 'v'         Version - Display application version details\n");
             printf("  Press 'q'         Quit - Request shutdown\n");
             printf("  Press 'l'         Log Level - Cycle log levels dynamically (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)\n");
 			printf("  Press 's'         Stats - Request stats summary on next data reception\n");
+#endif
             return 0;
         } else {
             fprintf(stderr, "Unrecognized option: %s. %s\n", argv[i], HELP_HINT);
@@ -324,7 +355,7 @@ int main(int argc, char *argv[])
 //        return 1;
 //    }
 
-#if defined(MOD_DISC) || defined(MOD_ALL)
+#if defined(VISMUX_DISC) || defined(VISMUX_ALL)
     if (is_discover)
     {
         discover_records_t* discovery  = run_discovery_prober(role_filter);
@@ -359,22 +390,22 @@ int main(int argc, char *argv[])
         }
         return 0; // Turnkey exit immediately when the prober pass wraps up
     }
-#endif /* MOD_DISC || MOD_ALL */
+#endif /* VISMUX_DISC || VISMUX_ALL */
 
-#if defined(MOD_SRC) || defined(MOD_ALL)
+#if defined(VISMUX_SRC) || defined(VISMUX_ALL)
     if (is_source && mac_input && !validate_and_format_mac(mac_input, shm_path, sizeof(shm_path)))
     {
         fprintf(stderr, "Invalid MAC parameter. %s\n", HELP_HINT);
         return 1;
     }
-#endif /* MOD_SRC || MOD_ALL */
-#if defined(MOD_DEST) || defined(MOD_ALL)
+#endif /* VISMUX_SRC || VISMUX_ALL */
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
     if (is_dest && mac_input && !validate_and_format_mac(mac_input, shm_path, sizeof(shm_path)))
     {
         fprintf(stderr, "Invalid MAC parameter. %s\n", HELP_HINT);
         return 1;
     }
-#endif /* MOD_DEST || MOD_ALL */
+#endif /* VISMUX_DEST || VISMUX_ALL */
 
 //    if (is_dest && ix_dest ==0)
 //    {
@@ -393,12 +424,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-#if defined(MOD_SRC) || defined(MOD_ALL)
+#if defined(VISMUX_SRC) || defined(VISMUX_ALL)
     if (is_source && !mac_input && !resolve_source_shm())
     {
         return 1;
     }
-#endif /* MOD_SRC || MOD_ALL */
+#endif /* VISMUX_SRC || VISMUX_ALL */
 
     if (!mac_input) {
         mac_input = global_mac;
@@ -437,14 +468,14 @@ int main(int argc, char *argv[])
         }
 #endif// NODAEMON
 
-#if defined(MOD_SRC) || defined(MOD_ALL)
+#if defined(VISMUX_SRC) || defined(VISMUX_ALL)
     if (is_source)
     {
         run_source(shm_path, mac_input, !disable_discovery_listener);
     }
     else 
-#endif /* MOD_SRC || MOD_ALL */
-#if defined(MOD_DEST) || defined(MOD_ALL)
+#endif /* VISMUX_SRC || VISMUX_ALL */
+#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
     if (is_dest)
     {
         if (ix_dest == 0) {
@@ -503,7 +534,7 @@ int main(int argc, char *argv[])
         log_msg(2, "Terminating as no destination threads are running");
         keep_running = 0;
     }
-#endif /* MOD_DEST || MOD_ALL */
+#endif /* VISMUX_DEST || VISMUX_ALL */
 
     join_thread(&ui_thread);
 
