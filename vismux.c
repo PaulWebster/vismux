@@ -25,18 +25,30 @@
  ****************************************************************/
 #include "vismux.h"
 
+#if !defined(MOD_ALL) && !defined(MOD_DISC) && !defined(MOD_SRC) && !defined(MOD_DEST)
+#define MOD_ALL
+#endif
+#if (defined(MOD_ALL) + defined(MOD_DISC) + defined(MOD_SRC) + defined(MOD_DEST)) != 1
+#error "Define exactly one of MOD_ALL, MOD_DISC, MOD_SRC, or MOD_DEST"
+#endif
+
 char shm_path[128] = {0};
 char global_mac[18] = {0};
 
-// For discovery (--discover and --destination)
 #define SLOT_COUNT  16
 static destination_spec_t specs[SLOT_COUNT];
+#if defined(MOD_DEST) || defined(MOD_ALL)
+// For discovery (--discover and --destination)
 static pthread_t* threads[SLOT_COUNT];
+#endif
 
-// For --source
+
+#if defined(MOD_DEST) || defined(MOD_ALL)
+// For --destination
 bool no_shm_output = false; // *** need to pass to run_source ***
 bool wait_for_source = false;   // If running in destination mode but no sources configured or discovered then wait for one to appear
-
+#endif /* MOD_DEST || MOD_ALL */
+#if defined(MOD_SRC) || defined(MOD_ALL)
 // For --source
 int find_squeezelite_shm(void)
 {
@@ -119,19 +131,34 @@ bool resolve_source_shm(void)
         }
     }
 }
+#endif /* MOD_SRC || MOD_ALL */
 
 
 int main(int argc, char *argv[])
 {
     bool is_source = false, is_dest = false, is_discover = false;
+    #ifdef MOD_SRC
+        is_source = true;
+    #endif
+    #ifdef MOD_DEST
+        is_dest = true;
+    #endif
+    #ifdef MOD_DISC
+        is_discover = true;
+    #endif
+   
     char *mac_input = NULL;
     char *peppymeter_fifo_path = NULL;
     bool disable_discovery_listener = false;
+    (void)disable_discovery_listener;  /* usage might be removed by #ifdef so avoid compilation problem */
     int ix_dest = 0;
     bool daemonise = false;
     const char* logfile = NULL;
     uint8_t role_filter = 0;
+    (void)role_filter;  /* usage might be removed by #ifdef so avoid compilation problem */
+#if defined(MOD_DEST) || defined(MOD_ALL)
     bool discoverable = true;
+#endif
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
@@ -140,13 +167,16 @@ int main(int argc, char *argv[])
 #define ARG_AVAIL(n)  if ((i +n) >= argc) { fprintf(stderr, "invalid commandline"); exit(EXIT_FAILURE); }
     for (int i = 1; i < argc; i++)
     {
+#if !defined(MOD_SRC) && !defined(MOD_DEST) && !defined(MOD_DISC)
         if (strcmp(argv[i], "--source") == 0) {
             is_source = true;
         } else if (strcmp(argv[i], "--destination") == 0) {
             is_dest = true;
-        } else if (strcmp(argv[i], "--discover") == 0) {
+        } else  if (strcmp(argv[i], "--discover") == 0) {
             is_discover = true;
-        } else if (strcmp(argv[i], "--no-discover") == 0) {
+        } else 
+#endif
+        if (strcmp(argv[i], "--no-discover") == 0) {
             disable_discovery_listener = true;
         } else if (strcmp(argv[i], "--discover-source") == 0 ) {
             role_filter = DISCOVER_ROLE_SOURCE;
@@ -165,9 +195,13 @@ int main(int argc, char *argv[])
             discover_format = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--wait-for-shm") == 0) {
             wait_for_shm = true;
-        } else if (strcmp(argv[i], "--wait-for-source") == 0) {
+        } else 
+#if defined(MOD_DEST) || defined(MOD_ALL)
+            if (strcmp(argv[i], "--wait-for-source") == 0) {
             wait_for_source = true;
-        } else if (strcmp(argv[i], "--server") == 0 ) {
+        } else 
+#endif
+        if (strcmp(argv[i], "--server") == 0 ) {
             ARG_AVAIL(1);
             if (ix_dest < (int)(sizeof(specs)/sizeof(specs[0]))) {
                 char* src_ip = strdup(argv[++i]);
@@ -290,6 +324,7 @@ int main(int argc, char *argv[])
 //        return 1;
 //    }
 
+#if defined(MOD_DISC) || defined(MOD_ALL)
     if (is_discover)
     {
         discover_records_t* discovery  = run_discovery_prober(role_filter);
@@ -324,17 +359,22 @@ int main(int argc, char *argv[])
         }
         return 0; // Turnkey exit immediately when the prober pass wraps up
     }
+#endif /* MOD_DISC || MOD_ALL */
 
+#if defined(MOD_SRC) || defined(MOD_ALL)
     if (is_source && mac_input && !validate_and_format_mac(mac_input, shm_path, sizeof(shm_path)))
     {
         fprintf(stderr, "Invalid MAC parameter. %s\n", HELP_HINT);
         return 1;
     }
+#endif /* MOD_SRC || MOD_ALL */
+#if defined(MOD_DEST) || defined(MOD_ALL)
     if (is_dest && mac_input && !validate_and_format_mac(mac_input, shm_path, sizeof(shm_path)))
     {
         fprintf(stderr, "Invalid MAC parameter. %s\n", HELP_HINT);
         return 1;
     }
+#endif /* MOD_DEST || MOD_ALL */
 
 //    if (is_dest && ix_dest ==0)
 //    {
@@ -353,11 +393,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+#if defined(MOD_SRC) || defined(MOD_ALL)
     if (is_source && !mac_input && !resolve_source_shm())
     {
         return 1;
     }
-    
+#endif /* MOD_SRC || MOD_ALL */
+
     if (!mac_input) {
         mac_input = global_mac;
     }
@@ -395,11 +437,15 @@ int main(int argc, char *argv[])
         }
 #endif// NODAEMON
 
+#if defined(MOD_SRC) || defined(MOD_ALL)
     if (is_source)
     {
         run_source(shm_path, mac_input, !disable_discovery_listener);
     }
-    else if (is_dest)
+    else 
+#endif /* MOD_SRC || MOD_ALL */
+#if defined(MOD_DEST) || defined(MOD_ALL)
+    if (is_dest)
     {
         if (ix_dest == 0) {
             log_msg(-1, "No sources specified, using discovery to add sources.");
@@ -457,6 +503,7 @@ int main(int argc, char *argv[])
         log_msg(2, "Terminating as no destination threads are running");
         keep_running = 0;
     }
+#endif /* MOD_DEST || MOD_ALL */
 
     join_thread(&ui_thread);
 

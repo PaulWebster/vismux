@@ -12,7 +12,11 @@ CFLAGS_NAT     =
 CFLAGS_NATOSX  = -DNODAEMON
 CFLAGS_INTEL64 = 
 CFLAGS_INTEL32 = 
-CFLAGS_INTEL32_OLD = -m32
+CFLAGS_INTEL32_OLD = -m32 -DMOD_ALL
+CFLAGS_MOD_ALL = -DMOD_ALL
+CFLAGS_MOD_DEST = -DMOD_DEST
+CFLAGS_MOD_SRC = -DMOD_SRC
+CFLAGS_MOD_DISC = -DMOD_DISC
 
 # ARM Cross-Compilers & Architecture Tuning Flags
 # (Requires: sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu)
@@ -77,40 +81,58 @@ vismux.a: source.o discover.o destination.o console.o common.o
 	ar rcs $(@) $^
 	@echo "[+] Compiled local native static ibrary: $(@)"
 
-vismux_destination: vismux_destination.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+# The standalone native executable is a build target in its own right.
+vismux: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_MOD_ALL) $(CFLAGS_NAT) -o $@ $^ $(LIBS)
+	@echo "[+] Compiled local native binary: $@"
+
+vismux_destination: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_MOD_DEST) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
-vismux_source: vismux_source.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+vismux_source: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_MOD_SRC) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
-vismux_discover: vismux_discover.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
+vismux_discover: vismux.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_MOD_DISC) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
 # 1. Native Shorthand Target (Matches current host CPU architecture layout)
-native: vismux.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(TARGET_NATIVE) $^ $(LIBS)
-	@echo "[+] Compiled local native binary: $(TARGET_NATIVE)"
+native: vismux
 
 define CROSS_BUILD
-$(1)-%.o: %.c vismux.h
+build/$(1):
+	mkdir -p $$@
+
+build/$(1)/%.o: %.c vismux.h | build/$(1)
 	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
 
-vismux-$(1).a: $(addprefix $(1)-,source.o discover.o destination.o console.o common.o)
+build/$(1)/vismux_all.o: vismux.c vismux.h | build/$(1)
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CFLAGS_MOD_ALL) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
+
+build/$(1)/vismux_dest.o: vismux.c vismux.h | build/$(1)
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CFLAGS_MOD_DEST) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
+
+build/$(1)/vismux_src.o: vismux.c vismux.h | build/$(1)
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CFLAGS_MOD_SRC) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
+
+build/$(1)/vismux_disc.o: vismux.c vismux.h | build/$(1)
+	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CFLAGS_MOD_DISC) $$(CROSS_CFLAGS_$(1)) -I ./ $$< -c -o $$@
+
+build/$(1)/vismux.a: $(addprefix build/$(1)/,source.o discover.o destination.o console.o common.o) | build/$(1)
 	$$(CROSS_AR_$(1)) rcs $$@ $$^
 
-vismux-$(1): $(1)-vismux.o vismux-$(1).a
+vismux-$(1): build/$(1)/vismux_all.o build/$(1)/vismux.a
 	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
-vismux_destination-$(1): $(1)-vismux_destination.o vismux-$(1).a
+vismux_destination-$(1): build/$(1)/vismux_dest.o build/$(1)/vismux.a
 	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
-vismux_discover-$(1): $(1)-vismux_discover.o vismux-$(1).a
+vismux_discover-$(1): build/$(1)/vismux_disc.o build/$(1)/vismux.a
 	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
-vismux_source-$(1): $(1)-vismux_source.o vismux-$(1).a
+vismux_source-$(1): build/$(1)/vismux_src.o build/$(1)/vismux.a
 	$$(CROSS_CC_$(1)) $$(CFLAGS_COMMON) $$(CROSS_CFLAGS_$(1)) -o $$@ $$^ $$(LIBS)
 
 $(1): vismux-$(1) vismux_destination-$(1) vismux_discover-$(1) vismux_source-$(1)
@@ -121,10 +143,11 @@ $(foreach arch,$(CROSS_ARCHES),$(eval $(call CROSS_BUILD,$(arch))))
 
 # 7. native on OSX
 nativeosx: vismux.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NATOSX) -o $(TARGET_NATIVEOSX) $^ $(LIBSOSX)
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_MOD_ALL) $(CFLAGS_NATOSX) -o $(TARGET_NATIVEOSX) $^ $(LIBSOSX)
 	@echo "[+] Compiled local native binary: $(TARGET_NATIVEOSX)"
 	
 clean:
 	rm -f $(TARGET_NATIVE) $(TARGET_X86_64) $(TARGET_X86_32) $(TARGET_ARM64) $(TARGET_ARMHF) $(TARGET_ARMV6) $(CROSS_EXECUTABLES) \
 		vismux_destination vismux_discover vismux_source \
 		*.o *.a
+	rm -rf build

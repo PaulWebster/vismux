@@ -3,6 +3,7 @@ vismux
 vismux_destination
 vismux_discover
 vismux_source
+build/
 *.o
 *.so
 *.a

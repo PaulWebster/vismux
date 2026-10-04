@@ -53,7 +53,7 @@
 #include<netdb.h>
 #include<ifaddrs.h>
 
-#define APP_VERSION "0.0.9lp3"
+#define APP_VERSION "0.0.9lp4"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
