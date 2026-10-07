@@ -340,7 +340,7 @@ int main(int argc, char *argv[])
 #if !defined NODAEMON && !defined VISMUX_DISC   // Only if daemonisation is not disabled (not available on macOS)
             printf("  -z, --daemonise   Detach from terminal to run in background (daemon)\n");
 #endif  // !NODAEMON && !VISMUX_DISC
-            printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n");
+            printf("  --log-level <0-4> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG 4=VERBOSE)\n");
 //            printf("  --peppymeter-fifo <path> Destination output to a PeppyMeter FIFO\n");
 //            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
 #ifndef VISMUX_DISC

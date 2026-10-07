@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
             printf("Global Flags:\n");
 			printf("  -h, --help        Display this help message\n");
             printf("  -v, --version     Display application version details\n");
-            printf("  --log-level <0-3> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG)\n\n");
+            printf("  --log-level <0-4> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG, 4=VERBOSE)\n\n");
             printf("Interactive Controls (does not require Enter):\n");
             printf("  Press 'v'         Version - Display application version details\n");
             printf("  Press 'q'         Quit - Request shutdown\n");
