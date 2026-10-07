@@ -252,6 +252,10 @@ static void *discovery_responder_thread(void *arg)
 }
 
 pthread_t* run_discovery_responder(int role_id, const char* mac, int port, volatile bool *keep_running) {
+    if (keep_running == NULL) {
+        log_msg(-1, "run_discovery_responder: logic error, received NULL pointer");
+        exit(EXIT_FAILURE);
+    }
     discovery_responder_spec_t* responder_spec = calloc(1, sizeof(*responder_spec));
     responder_spec->role_id = role_id;
     responder_spec->port = port;

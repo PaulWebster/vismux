@@ -32,6 +32,10 @@ typedef struct {
     int sock_fd;
 } source_context_t;
 
+// global variable, currently the value of this variable is not changed
+// it exists to avoid passing a NULL pointer to the discovery responder
+bool source_keep_running = true;
+
 static void release_system_resources(source_context_t* ctxt)
 {
     if (ctxt->shm_ptr != MAP_FAILED)
@@ -87,8 +91,9 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
     useconds_t sleep_interval = 1000000 / target_fps;
     char net_buf[sizeof(msg_hdr_t) + sizeof(vis_t)];
     pthread_t* disc_thread = NULL;
+
     if (discoverable) {
-        disc_thread = run_discovery_responder(DISCOVER_ROLE_SOURCE, mac, global_port, NULL);
+        disc_thread = run_discovery_responder(DISCOVER_ROLE_SOURCE, mac, global_port, &source_keep_running);
     }
 
     while (keep_running)
