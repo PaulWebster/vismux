@@ -94,6 +94,8 @@ void log_msg(int level, const char *fmt, ...)
             lbl = "WARN";
         else if (level == 3)
             lbl = "DEBUG";
+        else if (level == 4)
+            lbl = "VERBOSE";
 
         va_list args;
         va_start(args, fmt);
@@ -202,7 +204,9 @@ static void *discovery_responder_thread(void *arg)
     disc_req_packet_t rx_packet;
     struct sockaddr_in client_addr;
 
-    while (keep_running)
+    // continue if global keep_running or if context specific keep running pointer
+    // is set and its contents are "true"
+    while (keep_running && (spec.keep_running == NULL || *spec.keep_running))
     {
         fd_set rfds;
         struct timeval tv = {.tv_sec = 0, .tv_usec = 200000};
@@ -234,7 +238,7 @@ static void *discovery_responder_thread(void *arg)
                     inet_ntop(AF_INET, &client_addr.sin_addr, target_ip_str, INET_ADDRSTRLEN);
 
                     // Debug log output tracing the dynamic network reply dispatch
-                    log_msg(3, "Dispatching discovery response packet back to prober host: %s:%d",
+                    log_msg(4, "Dispatching discovery response packet back to prober host: %s:%d",
                             target_ip_str, ntohs(client_addr.sin_port));
 
                     sendto(disc_fd, &tx_packet, sizeof(disc_resp_packet_t), 0,
@@ -247,10 +251,15 @@ static void *discovery_responder_thread(void *arg)
     return NULL;
 }
 
-pthread_t* run_discovery_responder(int role_id, const char* mac, int port) {
+pthread_t* run_discovery_responder(int role_id, const char* mac, int port, volatile bool *keep_running) {
+    if (keep_running == NULL) {
+        log_msg(-1, "run_discovery_responder: logic error, received NULL pointer");
+        exit(EXIT_FAILURE);
+    }
     discovery_responder_spec_t* responder_spec = calloc(1, sizeof(*responder_spec));
     responder_spec->role_id = role_id;
     responder_spec->port = port;
+    responder_spec->keep_running = keep_running;
     strcpy(responder_spec->mac, mac);
     return create_thread(NULL, discovery_responder_thread, responder_spec);
 }

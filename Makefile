@@ -93,16 +93,16 @@ vismux: vismux.c vismux.a
 	$(CC) $(CFLAGS_COMMON) $(CFLAGS_VISMUX_ALL) $(CFLAGS_NAT) -o $@ $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $@"
 
-vismux_destination: vismux.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_VISMUX_DEST) -o $(@) $^ $(LIBS)
+vismux_destination: vismux_destination.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
-vismux_source: vismux.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_VISMUX_SRC) -o $(@) $^ $(LIBS)
+vismux_source: vismux_source.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
-vismux_discover: vismux.c vismux.a
-	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) $(CFLAGS_VISMUX_DISC) -o $(@) $^ $(LIBS)
+vismux_discover: vismux_discover.c vismux.a
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS_NAT) -o $(@) $^ $(LIBS)
 	@echo "[+] Compiled local native binary: $(@)"
 
 # 1. Native Shorthand Target (Matches current host CPU architecture layout)
