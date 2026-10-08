@@ -53,7 +53,7 @@
 #include<netdb.h>
 #include<ifaddrs.h>
 
-#define APP_VERSION "0.0.9lp5"
+#define APP_VERSION "0.0.9lp6"
 #define VENDOR_STR "VISMUX"
 
 #define VIS_BUF_SIZE 16384
@@ -222,6 +222,7 @@ typedef struct {
 
 bool validate_and_format_mac(const char *mac_in, char *shm_out, size_t out_len);
 bool validate_mac_spec(const char *mac_in);
+
 void log_msg(int level, const char *fmt, ...);
 void handle_signal(int sig);
 
@@ -245,6 +246,10 @@ int is_ipaddr_local(const uint32_t s_addr);
 
 // global variables defined in vismux_common.c
 extern volatile sig_atomic_t keep_running;
+extern const char *log_level_names[];	// 0-n log levels - WARN, INFO etc
+// Function declaration to fetch the element count
+int get_log_level_count(void);
+
 extern atomic_int log_level;	// Atomic because it can be written to from console_listener_thread and read from other threads
 extern atomic_int force_stats_log;	// Atomic because it can be written to from console_listener_thread and read/reset from other threads
 

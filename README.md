@@ -44,7 +44,7 @@ You need to run one or more `vismux` in Source mode on a system that runs `Squee
 
 ### 1. Source Server Mode (Run on your Squeezelite Host)
 ```bash
-./vismux --source --mac b8:27:eb:01:02:03 --log-level 2
+./vismux --player --mac b8:27:eb:01:02:03 --log-level 2
 ```
 *Note: Defaults to listening for remote client visualizer requests on UDP port **`23483`**.*
 The `--mac` parameter is optional. If omitted, `vismux` searches `/dev/shm` for Squeezelite visualizer segments.  
@@ -64,16 +64,16 @@ If there is more than one Squeezelite on the source system then run one instance
 If no Squeezelite visualizer segment exists yet, source mode exits with an error by default. To wait for one to appear, use the interruptible polling mode:
 
 ```bash
-./vismux --source --wait-for-shm --log-level 2
+./vismux --player --wait-for-shm --log-level 2
 ```
 
 Press `q` or `Ctrl+C` to stop waiting. The wait option does not bypass the multiple-segment check.
 
 ### 2. Destination Client Mode (Run on the Remote Visualizer Node)
 ```bash
-./vismux --destination --server 192.168.1.50 [--mac b8:27:eb:01:02:03] --log-level 2
+./vismux --destination --source 192.168.1.50 [--mac b8:27:eb:01:02:03] --log-level 2
 ```
-*Note: the "--server" IP address is of the Source `vismux` not of **Lyrion Music Server**.*
+*Note: the "--source" IP address is of the Source/Player `vismux` not of **Lyrion Music Server**.*
 
 If you omit the --mac parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.  
 *Note: Jivelite-Vis from after September 2026 is required for this capability.*  
@@ -117,7 +117,7 @@ In that case pick the appropriate binary (vismux-aarch64, vismux-armhf, vismux-a
 
 and then configure, in the pCP Tweaks page, a "User command" of (for a Raspberry Pi Zero 2W player)
 ```bash
-/home/tc/vismux-armhf --source --wait-for-shm
+/home/tc/vismux-armhf --player --wait-for-shm
 ```
 (pick the correct binary name)
 
@@ -144,8 +144,8 @@ pcp br
 ### Interactive Controls
  Do not require hitting Enter/CR
 - Press `v`             Version - Display application version details
-- Press `q`             Quit - close down ``vismux``
-- Press `l`             Log level - Cycle console log levels dynamically mid-flight (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)
+- Press `q`             Quit - Request shutdown
+- Press `l` or `L`      Log Level - Cycle log levels dynamically: 'l' to increment 'L' to decrement
 - Press `s`             Stats - Request stats summary on next data reception
 
 ## Service Discovery Mode
@@ -203,11 +203,11 @@ vi vismux-source.service
 ```
 
 ```ini
-ExecStart=/usr/local/bin/vismux --source --mac YOUR_PLAYER_MAC_HERE --log-level 2
+ExecStart=/usr/local/bin/vismux --player --mac YOUR_PLAYER_MAC_HERE --log-level 2
 ```
 The `--mac` argument can be omitted when exactly one Squeezelite visualizer segment is present in `/dev/shm`. Add `--wait-for-shm` if the service may start before Squeezelite creates its segment:
 ```ini
-ExecStart=/usr/local/bin/vismux --source --wait-for-shm --log-level 2
+ExecStart=/usr/local/bin/vismux --player --wait-for-shm --log-level 2
 ```
 Copy the finished configuration file to `/etc/systemd/system/vismux-source.service` on the Squeezelite player machine.
 
@@ -219,7 +219,7 @@ vi vismux-dest.service
 ```
 
 ```ini
-ExecStart=/usr/local/bin/vismux --destination --server YOUR_SOURCE_IP_HERE [--mac YOUR_PLAYER_MAC_HERE] --log-level 2
+ExecStart=/usr/local/bin/vismux --destination --source YOUR_SOURCE_IP_HERE [--mac YOUR_PLAYER_MAC_HERE] --log-level 2
 ```
 Without `--mac`, the Destination waits for the Source subscription response to provide the MAC address before creating shared memory. Use `--mac-timeout <sec>` to control how long it waits before it retries.
 *Optional: If you explicitly want the shared memory segment unlinked and wiped every time the daemon cycles, append the `--remove-shm` flag to the end of the command string.*
@@ -268,6 +268,8 @@ To configure your desktop development machine to cross-compile for the entire ma
 ```bash
 sudo apt update
 sudo apt install build-essential gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+# For armv6 cross-compilation
+sudo apt install gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
 ```
 
 ### Host Option B: Compiling on a 64-bit Raspberry Pi Host (Raspberry Pi OS 64-bit)

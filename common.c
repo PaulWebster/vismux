@@ -76,6 +76,13 @@ void join_thread(pthread_t** ppt) {
     }
 }
 
+const char *log_level_names[] = {"ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"}; // Starts from 0 - there is a special -1 for logging forced notifications
+#define NUM_LOG_LEVELS ((int)(sizeof(log_level_names) / sizeof(log_level_names[0])))
+
+int get_log_level_count(void) {
+    return (int)NUM_LOG_LEVELS;
+}
+
 void log_msg(int level, const char *fmt, ...)
 {	// Thread safe print of log entry
     if (level <= atomic_load(&log_level))
@@ -85,17 +92,21 @@ void log_msg(int level, const char *fmt, ...)
         struct tm *tm_info = localtime(&now);
         strftime(t_str, sizeof(t_str), "%Y-%m-%d %H:%M:%S", tm_info);
 
-        const char *lbl = "INFO";
-        if (level == -1)
+        const char *lbl = "UNKNOWN";
+        if (level < 0)
             lbl = "NOTICE";
-        else if (level == 0)
-            lbl = "ERROR";
-        else if (level == 1)
-            lbl = "WARN";
-        else if (level == 3)
-            lbl = "DEBUG";
-        else if (level == 4)
-            lbl = "VERBOSE";
+        else if (level < NUM_LOG_LEVELS )
+        {
+            lbl = log_level_names[level];
+        }
+//        else if (level == 0)
+//            lbl = "ERROR";
+//        else if (level == 1)
+//            lbl = "WARN";
+//        else if (level == 3)
+//            lbl = "DEBUG";
+//       else if (level == 4)
+//            lbl = "VERBOSE";
 
         va_list args;
         va_start(args, fmt);

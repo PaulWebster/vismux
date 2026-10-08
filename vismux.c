@@ -36,18 +36,17 @@ char shm_path[128] = {0};
 char global_mac[18] = {0};
 
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
-#define SLOT_COUNT  16
-static destination_sink_t sinks[SLOT_COUNT];
+static destination_sink_t sinks[MAX_SEEN_PEERS];
 #endif
 
 
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
 // For --destination
-bool no_shm_output = false; // *** need to pass to run_source ***
-bool wait_for_source = false;   // If running in destination mode but no sources configured or discovered then wait for one to appear
+// bool no_shm_output = false; // *** need to pass to run_source ***
+// bool wait_for_source = false;   // If running in destination mode but no sources configured or discovered then wait for one to appear
 #endif /* VISMUX_DEST || VISMUX_ALL */
 #if defined(VISMUX_SRC) || defined(VISMUX_ALL)
-// For --source
+// For --player
 int find_squeezelite_shm(void)
 {
     DIR *shm_dir = opendir("/dev/shm");
@@ -99,7 +98,7 @@ int find_squeezelite_shm(void)
 }
 
 
-// for --source
+// for --player
 bool resolve_source_shm(void)
 {
     for (;;)
@@ -149,10 +148,14 @@ int main(int argc, char *argv[])
     char *peppymeter_fifo_path = NULL;
     bool disable_discovery_listener = false;
     (void)disable_discovery_listener;  /* usage might be removed by #ifdef so avoid compilation problem */
-    int ix_dest = 0;
-    (void)ix_dest;  /* usage might be removed by #ifdef so avoid compilation problem */
+//    int ix_dest = 0;
+//    (void)ix_dest;  /* usage might be removed by #ifdef so avoid compilation problem */
+    int dest_count = 0;
+    (void)dest_count;  /* usage might be removed by #ifdef so avoid compilation problem */
     bool daemonise = false;
     const char* logfile = NULL;
+    bool fmt_cmdline = false;
+    (void)fmt_cmdline;  /* usage might be removed by #ifdef so avoid compilation problem */
     uint8_t role_filter = 0;
     (void)role_filter;  /* usage might be removed by #ifdef so avoid compilation problem */
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
@@ -170,7 +173,7 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; i++)
     {
 #ifdef VISMUX_ALL
-        if (strcmp(argv[i], "--source") == 0) {
+        if (strcmp(argv[i], "--player") == 0) {
             is_source = true;
         } else if (strcmp(argv[i], "--destination") == 0) {
             is_dest = true;
@@ -181,7 +184,7 @@ int main(int argc, char *argv[])
         if (strcmp(argv[i], "--no-discover") == 0) {
             disable_discovery_listener = true;
         } else 
-#ifdef VISMUX_DISC
+#if defined(VISMUX_DISC) || defined(VISMUX_ALL)
         if (strcmp(argv[i], "--discover-source") == 0 ) {
             role_filter = DISCOVER_ROLE_SOURCE;
             is_discover = true;
@@ -199,26 +202,28 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--discover-format") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             discover_format = atoi(argv[++i]);
+        } else if (0 == strcmp(argv[i], "--format-commandline")) {
+            fmt_cmdline = true;
         } else if (strcmp(argv[i], "--wait-for-shm") == 0) {
             wait_for_shm = true;
         } else 
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
-            if (strcmp(argv[i], "--wait-for-source") == 0) {
-            wait_for_source = true;
-        } else 
+//            if (strcmp(argv[i], "--wait-for-source") == 0) {
+//            wait_for_source = true;
+//        } else 
 #endif
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
-        if (strcmp(argv[i], "--server") == 0 ) {
+        if (strcmp(argv[i], "--source") == 0 ) {
             ARG_AVAIL(1);
-            if (ix_dest < (int)(sizeof(sinks)/sizeof(sinks[0]))) {
-                destination_sink_t* sink = sinks + ix_dest;
+            if (dest_count < (int)(sizeof(sinks)/sizeof(sinks[0]))) {
+                destination_sink_t* sink = sinks + dest_count;
                 destination_task_t* task = &sink->task;
-                // play safe, zap the task data struct
                 memset(task, 0, sizeof(*task));
-                // duplicate the argument, we may need to tokenise it.
+                // duplicate the argument, we may need to tokkenise it.
                 char* src_ip = strdup(argv[++i]);
+                task->spec.peer.port = -1;
                 task->state.keep_running = true;
-                // first look for the MAC address segment separator "," , and split the string
+                // first look for the MAC address segment separator ',' , and split the string
                 char *macp = strchr(src_ip, ',');
                 if (macp) {
                     *macp = '\0';
@@ -230,7 +235,7 @@ int main(int argc, char *argv[])
                     }
                     strncpy(task->spec.peer.mac, macp, sizeof(task->spec.peer.mac)-1);
                 }
-                // then look for the port segment separator ":" , and split the string
+                // then look for port the segment separator ':' , and split the string
                 char *portp = strchr(src_ip, ':');
                 if (portp) {
                     *portp = '\0';
@@ -247,7 +252,7 @@ int main(int argc, char *argv[])
                 strncpy(task->spec.server_ip, src_ip, sizeof(task->spec.server_ip)-1);
                 sink->spec_setup = true;
                 free(src_ip);
-                ++ix_dest;
+                ++dest_count;
             } else {
                 log_msg(-1, "too many sources, max sources = %d", (int)(sizeof(sinks)/sizeof(sinks[0])));
             }
@@ -310,28 +315,30 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Squeezelite Replicator v%s\nUsage Options:\n", APP_VERSION);
 #ifdef VISMUX_ALL
-            printf("  Source Mode:      %s --source [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
+            printf("  Source Mode:      %s --player [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
 #elif defined VISMUX_SRC
             printf("  %s [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
 #endif
 #ifdef VISMUX_ALL
-            printf("  Destination Mode: %s --destination [--server <source_ip>[:<source_port>][,<mac_address>]] [--wait-for-source] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+            printf("  Destination Mode: %s --destination [--server <source_ip>[:<source_port>][,<mac_address>]] [--auto] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
 #elif defined VISMUX_DEST
-            printf("  %s [--server <source_ip>[:<source_port>][,<mac_address>]] [--wait-for-source] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+            printf("  %s [--server <source_ip>[:<source_port>][,<mac_address>]] [--auto] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
 #endif
 #if defined VISMUX_DEST || defined VISMUX_ALL
-            printf("    --server can be repeated multiple times, once for each source\n");
-            printf("    --auto add newly discovered sources");
-            printf("    --polling-wait delay between discovery calls (default=%d)", polling_wait_secs);
-            printf("    --destination-timeout period of disconnection on destinastion, after which to stop the destination (default=%d)", destination_timeout_secs);
+            printf("    --source can be repeated multiple times, once for each source\n");
+            printf("    --auto add newly discovered sources\n");
+            printf("    --polling-wait delay between discovery calls (default=%d)\n", polling_wait_secs);
+            printf("    --destination-timeout period of disconnection on destinastion, after which to stop the destination (default=%d)\n", destination_timeout_secs);
 #endif
 #ifdef VISMUX_ALL
-            printf("  Discovery Mode:   %s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
+            printf("  Discovery Mode:   %s --discover[-source|-destination] [--discover-format <fmt>] [--format-commandline] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
 #elif defined VISMUX_DISC
-            printf("%s --discover[-source|-destination] [--discover-format <fmt>] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
+            printf("%s --discover[-source|-destination] [--discover-format <fmt>] [--format-commandline] [--discover-timeout <sec>] [--discover-port <p>\n", argv[0]);
 #endif
-#if defined VISMUX_DISC || defined VISMUX_ALL
             printf("    --discover-source and  --discover-destination provide filtering of the discovery result\n");
+
+#if defined VISMUX_DISC || defined VISMUX_ALL
+            printf("    --format-commandline if used with source role filtered, returns source discovery responses in a format that can be used directly as input to running vismux in destinaion mode\n");
             printf("    --discover-format <fmt> 0=simple csv, 1=titles in csv\n");
 #endif
             printf("\nGlobal Flags:\n");
@@ -340,14 +347,22 @@ int main(int argc, char *argv[])
 #if !defined NODAEMON && !defined VISMUX_DISC   // Only if daemonisation is not disabled (not available on macOS)
             printf("  -z, --daemonise   Detach from terminal to run in background (daemon)\n");
 #endif  // !NODAEMON && !VISMUX_DISC
-            printf("  --log-level <0-4> Filter verbosity (0=ERR, 1=WARN, 2=INFO, 3=DBG 4=VERBOSE)\n");
+            int log_count = get_log_level_count();
+
+            // Print the main flag description dynamically showing <0-MAX>
+            printf("  --log-level <0-%d> Filter verbosity (", log_count - 1);
+
+            // Loop through all defined levels to build the "(0=..., 1=...)" list
+            for (int i = 0; i < log_count; i++) {
+                printf("%d=%s%s", i, log_level_names[i], (i < log_count - 1) ? ", " : ")\n");
+            }
 //            printf("  --peppymeter-fifo <path> Destination output to a PeppyMeter FIFO\n");
 //            printf("  --no-shm-output         Do not create, map, or update destination SHM\n");
 #ifndef VISMUX_DISC
             printf("\nInteractive Controls (Enter not required):\n");
             printf("  Press 'v'         Version - Display application version details\n");
             printf("  Press 'q'         Quit - Request shutdown\n");
-            printf("  Press 'l'         Log Level - Cycle log levels dynamically (0=ERROR -> 1=WARN -> 2=INFO -> 3=DEBUG)\n");
+            printf("  Press 'l' or 'L'  Log Level - Cycle log levels dynamically: 'l' to increment 'L' to decrement\n");
 			printf("  Press 's'         Stats - Request stats summary on next data reception\n");
 #endif
             return 0;
@@ -360,7 +375,14 @@ int main(int argc, char *argv[])
     int mode_count = (int)is_source + (int)is_dest + (int)is_discover;
     if (mode_count != 1)
     {
-        fprintf(stderr, "Specify exactly one mode: --source, --destination, or --discover. %s\n", HELP_HINT);
+        fprintf(stderr, "Specify exactly one mode: --player, --destination, or --discover. %s\n", HELP_HINT);
+        return 1;
+    }
+
+    int max_log_level = get_log_level_count() - 1;  // Returns number of elements in array so -1 because starts from 0
+    if (log_level < 0 || log_level > max_log_level )
+    {
+        fprintf(stderr, "--log-level must be a number from 0 to %d. %s\n", max_log_level, HELP_HINT);
         return 1;
     }
 
@@ -393,7 +415,12 @@ int main(int argc, char *argv[])
                     char ip_str[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &discovery->records[ix].ip, ip_str, INET_ADDRSTRLEN);
 
-                    if (discover_format == 0) {
+                    if (role_filter == DISCOVER_ROLE_SOURCE && fmt_cmdline) {
+                        printf("--source '%s:%u,%s'\n",
+                            ip_str,
+                            discovery->records[ix].port,
+                            discovery->records[ix].mac);
+                    } else if (discover_format == 0) {
                         printf("%s,%s,%u,%s,%s\n",
                             (discovery->records[ix].role == DISCOVER_ROLE_SOURCE) ? "SOURCE" : "DESTINATION",
                             ip_str,
@@ -443,12 +470,13 @@ int main(int argc, char *argv[])
         fprintf(stderr, "--stats-int must be numbers only and greater than or equal to 1. %s\n", HELP_HINT);
         return 1;
     }
+
     if (mac_timeout_secs < 1)
     {
         fprintf(stderr, "--mac-timeout must be numbers only and greater than or equal to 1. %s\n", HELP_HINT);
         return 1;
     }
-
+    
 #if defined(VISMUX_SRC) || defined(VISMUX_ALL)
     if (is_source && !mac_input && !resolve_source_shm())
     {
@@ -503,12 +531,12 @@ int main(int argc, char *argv[])
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
     if (is_dest)
     {
-        if (ix_dest == 0) {
-            log_msg(-1, "No sources specified, using discovery to add sources.");
-            destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs, true);
-          } else {
-            destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs, auto_add);
-          }
+        if (dest_count == 0 && !auto_add) {
+            log_msg(-1, "No sources specified, turning on auto");
+            auto_add = true;
+        }
+        destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs, auto_add);
+
         keep_running = 0;
     }
 #endif /* VISMUX_DEST || VISMUX_ALL */
