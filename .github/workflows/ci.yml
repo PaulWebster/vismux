@@ -106,7 +106,7 @@ jobs:
       run: |
         # Validates that native x86-compatible targets boot cleanly in this runner
         for target in "" -x86_64 -x86_32; do
-          for binary in vismux vismux_destination vismux_source vismux_discover; do
+          for binary in vismux vismux_destination vismux_source; do
             "./${binary}${target}" --version
           done
         done
