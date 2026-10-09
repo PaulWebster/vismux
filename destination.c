@@ -523,6 +523,15 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
         for (int ix_sink = 0; ix_sink < num_sinks; ++ix_sink) {
             destination_sink_t* sink = sinks + ix_sink;
             if (sink->spec_setup) {
+                if (sink->task.spec.peer.role != DISCOVER_ROLE_SOURCE) {
+                    log_msg(-1, "Ignoring sink on: %s:%d,%s, role is not source (%d)",
+                                sink->task.spec.server_ip,
+                                sink->task.spec.peer.port,
+                                sink->task.spec.peer.mac,
+                                sink->task.spec.peer.role
+                                );
+                    continue;
+                }
                 if (sink->task.state.active == false) {
                     if(sink->task.thread) {
                         // the sink thread has terminated, clean up
