@@ -250,6 +250,7 @@ int main(int argc, char *argv[])
                     exit(EXIT_FAILURE);
                 }
                 strncpy(task->spec.server_ip, src_ip, sizeof(task->spec.server_ip)-1);
+                sink->task.spec.peer.role = DISCOVER_ROLE_SOURCE;
                 sink->spec_setup = true;
                 free(src_ip);
                 ++dest_count;
