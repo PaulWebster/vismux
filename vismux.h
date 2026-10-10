@@ -205,6 +205,7 @@ typedef struct {
     peer_record_t peer;
     char          server_ip[INET_ADDRSTRLEN];
     bool          discoverable;
+    char          local_mac[18];
 } destination_specification_t;
 
 typedef struct {
