@@ -152,11 +152,11 @@ void run_destination(destination_task_t* task)
         log_msg(-1, "%s spec set to not run", task->spec.peer.mac);
         return;
     }
-    if (task->spec.peer.mac[0]) {
-        if (!validate_and_format_mac(task->spec.peer.mac, ctxt.shm_path, sizeof(ctxt.shm_path))) {
-            log_msg(-1, "Invalid MAC address %s", task->spec.peer.mac);
+    if (task->spec.local_mac[0]) {
+        if (!validate_and_format_mac(task->spec.local_mac, ctxt.shm_path, sizeof(ctxt.shm_path))) {
+            log_msg(-1, "Invalid MAC address %s", task->spec.local_mac);
         }
-        snprintf(ctxt.mac, sizeof(ctxt.mac), "%s", task->spec.peer.mac);
+        snprintf(ctxt.mac, sizeof(ctxt.mac), "%s", task->spec.local_mac);
     } else {
         ctxt.mac[0] = '\0';
     }
@@ -310,14 +310,15 @@ void run_destination(destination_task_t* task)
                             shm_ready = true;
                             first_frame = true;
                             last_network_seq = 0;
-                            log_msg(2, "%s: Destination SHM initialized from source MAC: %s", ctxt.mac, response->mac);
                             snprintf(ctxt.mac, sizeof(ctxt.mac), "%s", response->mac);
+                            log_msg(2, "%s: Destination SHM initialized from source MAC", ctxt.mac);
                         }
                         else
                         {
                             ctxt.shm_path[0] = '\0';
                         }
                         if (task->spec.discoverable) {
+                            // FIXME: should this be peer.mac instead of ctxt.mac?
                             disc_thread = run_discovery_responder(DISCOVER_ROLE_DESTINATION, ctxt.mac, ctxt.port, &task->state.keep_running);
                         }
                     }
@@ -367,8 +368,6 @@ void run_destination(destination_task_t* task)
             time_t current_time = time(NULL);
             if (first_frame || current_time - last_stats_log_time >= stats_int || current_level != STATS_LOG_LEVEL)
             {
-				
-				
                 log_msg(current_level, "%s: Processing updates: [Total frames: captured: %" PRIu64 ", dropped: %" PRIu64 ", full: %" PRIu64 "] [Total Data: %.2f MB]",
                         ctxt.mac,
                         total_received_frames,
@@ -453,7 +452,7 @@ static void init_destination_state(destination_thread_state_t* state) {
     state->accumulated_timeout = 0;
 }
 
-static bool setup_sink_peer (destination_sink_t* sink, peer_record_t* peer) {
+static bool setup_sink_from_discovered_peer (destination_sink_t* sink, peer_record_t* peer) {
     if (sink && peer) {
         if (is_ipaddr_local(peer->ip) == 0) {
             return false;
@@ -463,6 +462,8 @@ static bool setup_sink_peer (destination_sink_t* sink, peer_record_t* peer) {
         destination_task_t* task = &sink->task;
         memcpy(&task->spec.peer, peer, sizeof(task->spec.peer));
         inet_ntop(AF_INET, &peer->ip, task->spec.server_ip, sizeof(task->spec.server_ip));
+        // discovered sources have local_mac == peer.mac
+        memcpy(task->spec.local_mac,  peer->mac, sizeof(task->spec.local_mac));
         // TODO: make this configurable?
         task->spec.discoverable = true;
         sink->spec_setup = true;
@@ -610,7 +611,7 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
 
             if (!found && add_discovered) {
                if(avail_sink) {
-                   setup_sink_peer(avail_sink, peer);
+                   setup_sink_from_discovered_peer(avail_sink, peer);
                    start_sink(avail_sink);
                     log_msg(2, "%s: Started: sink on %s:%d",
                         avail_sink->task.spec.peer.mac,

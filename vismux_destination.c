@@ -61,12 +61,29 @@ int main(int argc, char *argv[])
                 if (macp) {
                     *macp = '\0';
                     ++macp;
+                    char* localmacp = strchr(macp, ',');
+                    if (localmacp) {
+                        *localmacp = '\0';
+                        ++localmacp;
+                    }
                     if (strlen(macp) != (sizeof(task->spec.peer.mac) - 1)
                             || !validate_mac_spec(macp)) {
                         log_msg(-1, "Invalid MAC address %s", macp);
                         exit(EXIT_FAILURE);
                     }
+                    if (localmacp && (
+                                strlen(localmacp) != (sizeof(task->spec.peer.mac) - 1)
+                                || !validate_mac_spec(localmacp)
+                                )) {
+                        log_msg(-1, "Invalid MAC address %s", localmacp);
+                        exit(EXIT_FAILURE);
+                    }
                     strncpy(task->spec.peer.mac, macp, sizeof(task->spec.peer.mac)-1);
+                    // default spec local_max to peer.mac
+                    strncpy(task->spec.local_mac, macp, sizeof(task->spec.local_mac)-1);
+                    if (localmacp) {
+                        strncpy(task->spec.local_mac, localmacp, sizeof(task->spec.local_mac)-1);
+                    }
                 }
                 // then look for port the segment separator ':' , and split the string
                 char *portp = strchr(src_ip, ':');
@@ -85,6 +102,7 @@ int main(int argc, char *argv[])
                 strncpy(task->spec.server_ip, src_ip, sizeof(task->spec.server_ip)-1);
                 task->spec.peer.role = DISCOVER_ROLE_SOURCE;
                 sink->spec_setup = true;
+                sink->task.spec.discoverable = true;
                 free(src_ip);
                 ++dest_count;
             } else {
@@ -132,7 +150,7 @@ int main(int argc, char *argv[])
             destination_timeout_secs = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Squeezelite Replicator Destination v%s\nUsage Options:\n", APP_VERSION);
-            printf("%s  <--source <source_ip>[:port][,mac_address]> ", argv[0]);
+            printf("%s  <--source <source_ip>[:port][,player_mac_address[,local_mac_address]]> ", argv[0]);
 //            printf("  [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>]  [--not-discoverable] [--remove-shm] [--stats-int <interval_secs>]\n\n");
             printf("  [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n\n");
             printf(" --source can be repeated multiple times, once for each source\n");
@@ -187,10 +205,10 @@ int main(int argc, char *argv[])
 
     if (dest_count == 0) {
         log_msg(-1, "No sources specified, turning on auto");
-        destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs, true);
-    } else {
-        destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs,  auto_add);
+        auto_add = true;
     }
+
+    destination_sink_manager(sinks, (int)(sizeof(sinks)/sizeof(sinks[0])), polling_wait_secs, destination_timeout_secs,  auto_add);
 
     keep_running = 0;
     join_thread(&ui_thread);
