@@ -193,13 +193,13 @@ int main(int argc, char *argv[])
             is_discover = true;
         } else 
 #endif
-        if (strcmp(argv[i], "--discover-timeout") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--discover-timeout") == 0 ) {
             ARG_AVAIL(1);
             discover_timeout_secs = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--discover-port") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--discover-port") == 0 ) {
             ARG_AVAIL(1);
             discover_port = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--discover-format") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--discover-format") == 0 ) {
             ARG_AVAIL(1);
             discover_format = atoi(argv[++i]);
         } else if (0 == strcmp(argv[i], "--format-commandline")) {
@@ -228,12 +228,29 @@ int main(int argc, char *argv[])
                 if (macp) {
                     *macp = '\0';
                     ++macp;
+                    char* localmacp = strchr(macp, ',');
+                    if (localmacp) {
+                        *localmacp = '\0';
+                        ++localmacp;
+                    }
                     if (strlen(macp) != (sizeof(task->spec.peer.mac) - 1)
                             || !validate_mac_spec(macp)) {
                         log_msg(-1, "Invalid MAC address %s", macp);
                         exit(EXIT_FAILURE);
                     }
+                    if (localmacp && (
+                                strlen(localmacp) != (sizeof(task->spec.peer.mac) - 1)
+                                || !validate_mac_spec(localmacp)
+                                )) {
+                        log_msg(-1, "Invalid MAC address %s", localmacp);
+                        exit(EXIT_FAILURE);
+                    }
                     strncpy(task->spec.peer.mac, macp, sizeof(task->spec.peer.mac)-1);
+                    // default spec local_max to peer.mac
+                    strncpy(task->spec.local_mac, macp, sizeof(task->spec.local_mac)-1);
+                    if (localmacp) {
+                        strncpy(task->spec.local_mac, localmacp, sizeof(task->spec.local_mac)-1);
+                    }
                 }
                 // then look for port the segment separator ':' , and split the string
                 char *portp = strchr(src_ip, ':');
@@ -250,8 +267,9 @@ int main(int argc, char *argv[])
                     exit(EXIT_FAILURE);
                 }
                 strncpy(task->spec.server_ip, src_ip, sizeof(task->spec.server_ip)-1);
-                sink->task.spec.peer.role = DISCOVER_ROLE_SOURCE;
+                task->spec.peer.role = DISCOVER_ROLE_SOURCE;
                 sink->spec_setup = true;
+                sink->task.spec.discoverable = true;
                 free(src_ip);
                 ++dest_count;
             } else {
@@ -267,29 +285,33 @@ int main(int argc, char *argv[])
             destination_timeout_secs = atoi(argv[++i]);
         } else 
 #endif /* VISMUX_DEST || VISMUX_ALL */
+#if defined(VISMUX_SRC) || defined(VISMUX_ALL)
         if (strcmp(argv[i], "--mac") == 0 && i + 1 < argc) {
             ARG_AVAIL(1);
             mac_input = argv[++i];
-        } else if (strcmp(argv[i], "--peppymeter-fifo") == 0 && i + 1 < argc) {
+        } else
+#endif
+        if (strcmp(argv[i], "--peppymeter-fifo") == 0 ) {
             ARG_AVAIL(1);
             peppymeter_fifo_path = argv[++i];
-        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--port") == 0 ) {
             ARG_AVAIL(1);
             global_port = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--fps") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--fps") == 0 ) {
+            ARG_AVAIL(1);
             target_fps = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--timeout") == 0 ) {
             ARG_AVAIL(1);
             timeout_secs = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--mac-timeout") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--mac-timeout") == 0 ) {
             ARG_AVAIL(1);
             mac_timeout_secs = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--log-level") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--log-level") == 0 ) {
             ARG_AVAIL(1);
             log_level = atoi(argv[++i]);
         } else 
 #if defined(VISMUX_DEST) || defined(VISMUX_ALL)
-        if (strcmp(argv[i], "--proto-version") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--proto-version") == 0 ) {
             ARG_AVAIL(1);
             forced_proto_version = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--remove-shm") == 0) {
@@ -298,7 +320,7 @@ int main(int argc, char *argv[])
 //            no_shm_output = true;
         } else
 #endif /* VISMUX_DEST || VISMUX_ALL*/
-        if (strcmp(argv[i], "--stats-int") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--stats-int") == 0 ) {
             ARG_AVAIL(1);
             stats_int = atoi(argv[++i]);
         } 
@@ -321,11 +343,12 @@ int main(int argc, char *argv[])
             printf("  %s [--mac <mac_address>] [--wait-for-shm] [--port <p>] [--fps <f>] [--timeout <sec>] [--no-discover] [--discover-port <p>]\n", argv[0]);
 #endif
 #ifdef VISMUX_ALL
-            printf("  Destination Mode: %s --destination [--server <source_ip>[:<source_port>][,<mac_address>]] [--auto] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+            printf("  Destination Mode: %s <--destination --source <source_ip>[:port][,player_mac_address[,local_mac_address]]> ", argv[0]);
 #elif defined VISMUX_DEST
-            printf("  %s [--server <source_ip>[:<source_port>][,<mac_address>]] [--auto] [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n", argv[0]);
+            printf("%s  <--source <source_ip>[:port][,player_mac_address[,local_mac_address]]> ", argv[0]);
 #endif
 #if defined VISMUX_DEST || defined VISMUX_ALL
+            printf("  [--mac-timeout <sec>] [--port <p>] [--proto-version <1|2>] [--remove-shm] [--stats-int <interval_secs>]\n\n");
             printf("    --source can be repeated multiple times, once for each source\n");
             printf("    --auto add newly discovered sources\n");
             printf("    --polling-wait delay between discovery calls (default=%d)\n", polling_wait_secs);
@@ -452,20 +475,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 #endif /* VISMUX_SRC || VISMUX_ALL */
-#if defined(VISMUX_DEST) || defined(VISMUX_ALL)
-    if (is_dest && mac_input && !validate_and_format_mac(mac_input, shm_path, sizeof(shm_path)))
-    {
-        fprintf(stderr, "Invalid MAC parameter. %s\n", HELP_HINT);
-        return 1;
-    }
-#endif /* VISMUX_DEST || VISMUX_ALL */
 
-//    if (is_dest && ix_dest ==0)
-//    {
-//        fprintf(stderr, "Destination mode requires --server <source_ip>. %s\n", HELP_HINT);
-//        return 1;
-//    }
-//
     if (stats_int < 1)
     {
         fprintf(stderr, "--stats-int must be numbers only and greater than or equal to 1. %s\n", HELP_HINT);
@@ -543,7 +553,7 @@ int main(int argc, char *argv[])
 #endif /* VISMUX_DEST || VISMUX_ALL */
 
     join_thread(&ui_thread);
-
+    log_msg(2, "Bye.");
 //    release_system_resources();
     return 0;
 }

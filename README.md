@@ -71,13 +71,13 @@ Press `q` or `Ctrl+C` to stop waiting. The wait option does not bypass the multi
 
 ### 2. Destination Client Mode (Run on the Remote Visualizer Node)
 ```bash
-./vismux --destination --source 192.168.1.50 [--mac b8:27:eb:01:02:03] --log-level 2
+./vismux --destination --source 192.168.1.50 --log-level 2
 ```
 *Note: the "--source" IP address is of the Source/Player `vismux` not of **Lyrion Music Server**.*
-
-If you omit the --mac parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.  
+--source can take additional parameters - see the built-in --help for more information
+If you omit the additional parameter then `vismux` will use the MAC address that the remote `vismux` is using. This is the typical usage since Jivelite is looking for a MAC address that matches the selected player.  
 *Note: Jivelite-Vis from after September 2026 is required for this capability.*  
-**cava** can be configured to look for any particular Squeezelite MAC address - so in this case the --mac can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
+**cava** can be configured to look for any particular Squeezelite MAC address - so in this case the additional parameters can be used to create one of your choice. So you could create a fake one and then run ``vismux`` to target any remote `vismux` Source.
 
 ### 3. Downloading and unpacking
 You can build `vismux` from the source code (instructions are below) or you can use a pre-built binary.
@@ -250,6 +250,8 @@ sudo systemctl start vismux-dest.service
 ```bash
 sudo journalctl -u vismux-dest.service -f
 ```
+
+You can also use a command line parameter to specify a logile. This could be convenient on systems without systemd - such as piCorePlayer
 
 **Example Output (Level 2 - INFO):**
 ```text
