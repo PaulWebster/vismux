@@ -301,6 +301,8 @@ void run_destination(destination_task_t* task)
                 subscription_response_t *response = (subscription_response_t *)(rx_window + sizeof(msg_hdr_t));
                 if (!shm_ready)
                 {
+                    // The MAC comes from the network; make it safe to use as a string.
+                    response->mac[sizeof(response->mac) - 1] = '\0';
                     char negotiated_shm_path[sizeof(ctxt.shm_path)];
                     if (validate_and_format_mac(response->mac, negotiated_shm_path, sizeof(negotiated_shm_path)))
                     {
@@ -387,6 +389,19 @@ void run_destination(destination_task_t* task)
             if (msg->payload_len <= wire_headers_sz || msg->payload_len > (wire_headers_sz + sizeof(ctxt.shm_ptr->buffer)) || (size_t)bytes_in < (sizeof(msg_hdr_t) + msg->payload_len))
                 continue;
 
+            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
+            uint32_t new_buf_size = ntohl(wirehdr->buf_size);
+            uint32_t new_buf_index = ntohl(wirehdr->buf_index);
+            uint32_t new_rate = ntohl(wirehdr->rate);
+
+            // Reject malformed headers before they reach the shared buffer.
+            if (new_buf_size == 0 || new_buf_size > VIS_BUF_SIZE ||
+                new_buf_index >= VIS_BUF_SIZE || new_rate == 0)
+            {
+                total_dropped_frames++;
+                continue;
+            }
+
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
             size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
@@ -404,11 +419,10 @@ void run_destination(destination_task_t* task)
                 }
             }
 
-            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
-            ctxt.shm_ptr->buf_size = ntohl(wirehdr->buf_size);
-            ctxt.shm_ptr->buf_index = ntohl(wirehdr->buf_index);
+            ctxt.shm_ptr->buf_size = new_buf_size;
+            ctxt.shm_ptr->buf_index = new_buf_index;
             ctxt.shm_ptr->running = (bool)ntohl(wirehdr->running);
-            ctxt.shm_ptr->rate = ntohl(wirehdr->rate);
+            ctxt.shm_ptr->rate = new_rate;
             ctxt.shm_ptr->updated = (uint64_t)time(NULL);
 
             first_frame = false;
