@@ -388,10 +388,14 @@ void run_destination(destination_task_t* task)
                 continue;
 
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
+            // Use this packet's new head, not the stale local buf_index, as the anchor.
+            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
+            uint32_t new_buf_index = ntohl(wirehdr->buf_index);
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
             size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
             if (received_audio_bytes == sizeof(ctxt.shm_ptr->buffer))
             {
+                // Full frames replace the whole ring, so no placement calculation is needed.
                 memcpy(ctxt.shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
             }
             else
@@ -399,14 +403,18 @@ void run_destination(destination_task_t* task)
                 uint32_t incoming_samples = received_audio_bytes / sizeof(int16_t);
                 for (uint32_t i = 0; i < incoming_samples; i++)
                 {
-                    uint32_t target_idx = (ctxt.shm_ptr->buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
+                    // Place the samples so they end at new_buf_index. The local
+                    // buf_index still points at the previous packet's end, so using
+                    // it would move the delta back one packet. The extra
+                    // VIS_BUF_SIZE keeps the index positive when it wraps past zero.
+                    uint32_t target_idx = (new_buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
                     ctxt.shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
                 }
             }
 
-            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
             ctxt.shm_ptr->buf_size = ntohl(wirehdr->buf_size);
-            ctxt.shm_ptr->buf_index = ntohl(wirehdr->buf_index);
+            // Publish the new head only after all samples for this packet are in place.
+            ctxt.shm_ptr->buf_index = new_buf_index;
             ctxt.shm_ptr->running = (bool)ntohl(wirehdr->running);
             ctxt.shm_ptr->rate = ntohl(wirehdr->rate);
             ctxt.shm_ptr->updated = (uint64_t)time(NULL);
