@@ -404,8 +404,6 @@ void run_destination(destination_task_t* task)
 
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
             // Use this packet's new head, not the stale local buf_index, as the anchor.
-            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
-            uint32_t new_buf_index = ntohl(wirehdr->buf_index);
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
             size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
             if (received_audio_bytes == sizeof(ctxt.shm_ptr->buffer))
