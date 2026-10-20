@@ -291,12 +291,16 @@ void run_destination(destination_task_t* task)
         if (bytes_in < (ssize_t)sizeof(msg_hdr_t))
             continue;
         msg_hdr_t *msg = (msg_hdr_t *)rx_window;
+        // Header fields are network byte order on the wire. Keep host-order
+        // copies so the rest of this function never compares raw byte order.
+        uint32_t sequence = ntohl(msg->sequence);
+        uint32_t payload_len = ntohl(msg->payload_len);
         size_t wire_headers_sz = sizeof(vis_wire_hdr_t);
 
         if (msg->type == PACKET_SUB_ACK)
         {
-            if (msg->payload_len == sizeof(subscription_response_t) &&
-                (size_t)bytes_in >= sizeof(msg_hdr_t) + msg->payload_len)
+            if (payload_len == sizeof(subscription_response_t) &&
+                (size_t)bytes_in >= sizeof(msg_hdr_t) + payload_len)
             {
                 subscription_response_t *response = (subscription_response_t *)(rx_window + sizeof(msg_hdr_t));
                 if (!shm_ready)
@@ -340,12 +344,12 @@ void run_destination(destination_task_t* task)
 
         if (msg->type == PACKET_DATA)
         {
-            if (!shm_ready || (!first_frame && msg->sequence < last_network_seq && (last_network_seq - msg->sequence) < 100000))
+            if (!shm_ready || (!first_frame && sequence < last_network_seq && (last_network_seq - sequence) < 100000))
             {
                 total_dropped_frames++;
                 continue;
             }
-            last_network_seq = msg->sequence;
+            last_network_seq = sequence;
 
             last_success_packet_time = now_check;
             if (was_connection_logged_down)
@@ -354,9 +358,9 @@ void run_destination(destination_task_t* task)
                 was_connection_logged_down = false;
             }
             total_received_frames++;
-            total_received_bytes += msg->payload_len;
-            bool is_full_frame = msg->payload_len >= wire_headers_sz &&
-                                 msg->payload_len - wire_headers_sz == sizeof(ctxt.shm_ptr->buffer);
+            total_received_bytes += payload_len;
+            bool is_full_frame = payload_len >= wire_headers_sz &&
+                                 payload_len - wire_headers_sz == sizeof(ctxt.shm_ptr->buffer);
             if (is_full_frame)
                 total_full_frames++;
 
@@ -386,7 +390,7 @@ void run_destination(destination_task_t* task)
 				atomic_store(&force_stats_log, 0);
 			}
 
-            if (msg->payload_len <= wire_headers_sz || msg->payload_len > (wire_headers_sz + sizeof(ctxt.shm_ptr->buffer)) || (size_t)bytes_in < (sizeof(msg_hdr_t) + msg->payload_len))
+            if (payload_len <= wire_headers_sz || payload_len > (wire_headers_sz + sizeof(ctxt.shm_ptr->buffer)) || (size_t)bytes_in < (sizeof(msg_hdr_t) + payload_len))
                 continue;
 
             vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
@@ -405,7 +409,7 @@ void run_destination(destination_task_t* task)
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
             // Use this packet's new head, not the stale local buf_index, as the anchor.
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
-            size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
+            size_t received_audio_bytes = payload_len - wire_headers_sz;
             if (received_audio_bytes == sizeof(ctxt.shm_ptr->buffer))
             {
                 // Full frames replace the whole ring, so no placement calculation is needed.
@@ -433,7 +437,7 @@ void run_destination(destination_task_t* task)
 
             first_frame = false;
             pthread_rwlock_unlock(&ctxt.shm_ptr->rwlock);
-            msg_hdr_t ack_hdr = {.protocol_version = msg->protocol_version, .type = PACKET_ACK, .sequence = msg->sequence, .payload_len = 0};
+            msg_hdr_t ack_hdr = {.protocol_version = msg->protocol_version, .type = PACKET_ACK, .sequence = htonl(sequence), .payload_len = 0};
             sendto(ctxt.sock_fd, &ack_hdr, sizeof(msg_hdr_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
         }
     }
