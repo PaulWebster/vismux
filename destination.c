@@ -162,7 +162,10 @@ void run_destination(destination_task_t* task)
     }
     bool shm_ready = ctxt.shm_path[0] != '\0';
     if (shm_ready && !setup_destination_shm(&ctxt)) {
-        exit(EXIT_FAILURE);
+        log_msg(0, "%s: failed to set up destination SHM", ctxt.mac);
+        // setup_destination_shm() already cleaned up; avoid unlinking a segment we may not own.
+        task->state.active = false;
+        return;
     }
 
     log_msg(2, "%s: Destination Engine Online (%s) expecting data from: %s:%d", ctxt.mac, APP_VERSION, task->spec.server_ip, ctxt.port);
@@ -177,8 +180,7 @@ void run_destination(destination_task_t* task)
     if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
     {
         log_msg(0, "%s: bind to ephemeral port failed (1)", ctxt.mac);
-        release_system_resources(&ctxt);
-        exit(EXIT_FAILURE);
+        goto shutdown;
     }
     if (getsockname(ctxt.sock_fd, (struct sockaddr *)&local_bound_addr, &local_bound_len) == 0)
         log_msg(3, "%s: Outbound ephemeral port: %d", ctxt.mac, ntohs(local_bound_addr.sin_port));
@@ -246,8 +248,7 @@ void run_destination(destination_task_t* task)
                         if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
                         {
                             log_msg(0, "%s: bind to ephemeral port failed (2)", ctxt.mac);
-                            release_system_resources(&ctxt);
-                            exit(EXIT_FAILURE);
+                            goto shutdown;
                         }
                         setsockopt(ctxt.sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
                         local_bound_len = sizeof(local_bound_addr);
@@ -273,8 +274,7 @@ void run_destination(destination_task_t* task)
                     if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
                     {
                         log_msg(0, "%s: bind to ephemeral port failed (3)", ctxt.mac);
-                        release_system_resources(&ctxt);
-                        exit(EXIT_FAILURE);
+                        goto shutdown;
                     }
                     setsockopt(ctxt.sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -425,6 +425,10 @@ void run_destination(destination_task_t* task)
             sendto(ctxt.sock_fd, &ack_hdr, sizeof(msg_hdr_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
         }
     }
+
+shutdown:
+    // Worker threads must see this before join_thread() waits for them.
+    task->state.keep_running = false;
     join_thread(&hb_thread);
     join_thread(&disc_thread);
     release_system_resources(&ctxt);
@@ -579,9 +583,9 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
             peer_record_t* peer = discovery->records +ix_discovery;
             int is_local = is_ipaddr_local(peer->ip);
             if (is_local == 0) { continue; }
-            if (is_local < 0) { 
-                log_msg(-1, "Unable to retrieve local IP addresses");
-                exit(EXIT_FAILURE);
+            if (is_local < 0) {
+                log_msg(1, "Unable to retrieve local IP addresses; skipping this discovery poll");
+                break;
             }
             bool found = false;
             destination_sink_t* avail_sink = NULL;
