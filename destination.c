@@ -162,7 +162,10 @@ void run_destination(destination_task_t* task)
     }
     bool shm_ready = ctxt.shm_path[0] != '\0';
     if (shm_ready && !setup_destination_shm(&ctxt)) {
-        exit(EXIT_FAILURE);
+        log_msg(0, "%s: failed to set up destination SHM", ctxt.mac);
+        // setup_destination_shm() already cleaned up; avoid unlinking a segment we may not own.
+        task->state.active = false;
+        return;
     }
 
     log_msg(2, "%s: Destination Engine Online (%s) expecting data from: %s:%d", ctxt.mac, APP_VERSION, task->spec.server_ip, ctxt.port);
@@ -177,8 +180,7 @@ void run_destination(destination_task_t* task)
     if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
     {
         log_msg(0, "%s: bind to ephemeral port failed (1)", ctxt.mac);
-        release_system_resources(&ctxt);
-        exit(EXIT_FAILURE);
+        goto shutdown;
     }
     if (getsockname(ctxt.sock_fd, (struct sockaddr *)&local_bound_addr, &local_bound_len) == 0)
         log_msg(3, "%s: Outbound ephemeral port: %d", ctxt.mac, ntohs(local_bound_addr.sin_port));
@@ -246,8 +248,7 @@ void run_destination(destination_task_t* task)
                         if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
                         {
                             log_msg(0, "%s: bind to ephemeral port failed (2)", ctxt.mac);
-                            release_system_resources(&ctxt);
-                            exit(EXIT_FAILURE);
+                            goto shutdown;
                         }
                         setsockopt(ctxt.sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
                         local_bound_len = sizeof(local_bound_addr);
@@ -273,8 +274,7 @@ void run_destination(destination_task_t* task)
                     if (bind(ctxt.sock_fd, (struct sockaddr *)&any_addr, sizeof(any_addr)))
                     {
                         log_msg(0, "%s: bind to ephemeral port failed (3)", ctxt.mac);
-                        release_system_resources(&ctxt);
-                        exit(EXIT_FAILURE);
+                        goto shutdown;
                     }
                     setsockopt(ctxt.sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -403,10 +403,14 @@ void run_destination(destination_task_t* task)
             }
 
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
+            // Use this packet's new head, not the stale local buf_index, as the anchor.
+            vis_wire_hdr_t* wirehdr = (vis_wire_hdr_t*)(rx_window + sizeof(msg_hdr_t));
+            uint32_t new_buf_index = ntohl(wirehdr->buf_index);
             char *incoming_audio_payload = rx_window + sizeof(msg_hdr_t) + wire_headers_sz;
             size_t received_audio_bytes = msg->payload_len - wire_headers_sz;
             if (received_audio_bytes == sizeof(ctxt.shm_ptr->buffer))
             {
+                // Full frames replace the whole ring, so no placement calculation is needed.
                 memcpy(ctxt.shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
             }
             else
@@ -414,7 +418,11 @@ void run_destination(destination_task_t* task)
                 uint32_t incoming_samples = received_audio_bytes / sizeof(int16_t);
                 for (uint32_t i = 0; i < incoming_samples; i++)
                 {
-                    uint32_t target_idx = (ctxt.shm_ptr->buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
+                    // Place the samples so they end at new_buf_index. The local
+                    // buf_index still points at the previous packet's end, so using
+                    // it would move the delta back one packet. The extra
+                    // VIS_BUF_SIZE keeps the index positive when it wraps past zero.
+                    uint32_t target_idx = (new_buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
                     ctxt.shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
                 }
             }
@@ -431,6 +439,10 @@ void run_destination(destination_task_t* task)
             sendto(ctxt.sock_fd, &ack_hdr, sizeof(msg_hdr_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
         }
     }
+
+shutdown:
+    // Worker threads must see this before join_thread() waits for them.
+    task->state.keep_running = false;
     join_thread(&hb_thread);
     join_thread(&disc_thread);
     release_system_resources(&ctxt);
@@ -585,9 +597,9 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
             peer_record_t* peer = discovery->records +ix_discovery;
             int is_local = is_ipaddr_local(peer->ip);
             if (is_local == 0) { continue; }
-            if (is_local < 0) { 
-                log_msg(-1, "Unable to retrieve local IP addresses");
-                exit(EXIT_FAILURE);
+            if (is_local < 0) {
+                log_msg(1, "Unable to retrieve local IP addresses; skipping this discovery poll");
+                break;
             }
             bool found = false;
             destination_sink_t* avail_sink = NULL;
@@ -636,6 +648,8 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
                }
             }
         }
+        // Free the record set allocated by run_discovery_prober() for this poll.
+        free(discovery);
         for (int isleep = 0; isleep < poll_wait_secs && keep_running; ++isleep) {
             sleep(1);
         }
