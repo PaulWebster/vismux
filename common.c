@@ -142,6 +142,10 @@ void handle_signal(int sig)
 
 bool validate_and_format_mac(const char *mac_in, char *shm_out, size_t out_len)
 {
+    // The longest accepted form is 12 hex digits plus 5 separators.
+    if (strlen(mac_in) > 17)
+        return false;
+
     int hex_chars = 0;
     char clean_mac[12] = {0};
     for (int i = 0; mac_in[i] != '\0'; i++)
@@ -268,11 +272,20 @@ pthread_t* run_discovery_responder(int role_id, const char* mac, int port, volat
         exit(EXIT_FAILURE);
     }
     discovery_responder_spec_t* responder_spec = calloc(1, sizeof(*responder_spec));
+    if (responder_spec == NULL) {
+        log_msg(0, "run_discovery_responder: out of memory");
+        return NULL;
+    }
     responder_spec->role_id = role_id;
     responder_spec->port = port;
     responder_spec->keep_running = keep_running;
-    strcpy(responder_spec->mac, mac);
-    return create_thread(NULL, discovery_responder_thread, responder_spec);
+    snprintf(responder_spec->mac, sizeof(responder_spec->mac), "%s", mac);
+
+    pthread_t* thread = create_thread(NULL, discovery_responder_thread, responder_spec);
+    if (thread == NULL) {
+        free(responder_spec);
+    }
+    return thread;
 }
 
 int is_ipaddr_local(const uint32_t s_addr) {

@@ -73,7 +73,14 @@ discover_records_t* run_discovery_prober(uint8_t role_filter)
         {
             if (strncmp(resp.magic, DISCOVER_MAGIC, sizeof(DISCOVER_MAGIC)) == 0)
             {
+                // Network strings are not guaranteed to be NUL-terminated.
+                resp.mac[sizeof(resp.mac) - 1] = '\0';
+                resp.version[DISCOVER_VERSION_LEN - 1] = '\0';
+
                 uint32_t response_port = ntohl(resp.port);
+                if (response_port == 0 || response_port > 0xFFFF)
+                    continue;
+
                 const char *response_version = len >= (ssize_t)sizeof(disc_resp_packet_t) && resp.version[0] != '\0'
                                                     ? resp.version
                                                     : "unknown";
