@@ -622,6 +622,8 @@ void destination_sink_manager(destination_sink_t* sinks, int num_sinks, int poll
                }
             }
         }
+        // Free the record set allocated by run_discovery_prober() for this poll.
+        free(discovery);
         for (int isleep = 0; isleep < poll_wait_secs && keep_running; ++isleep) {
             sleep(1);
         }
