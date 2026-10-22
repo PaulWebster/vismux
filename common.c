@@ -45,6 +45,15 @@ int discover_timeout_secs = 2;
 int discover_port = DISCOVER_PORT; // Overridable runtime discovery port descriptor
 int discover_format = 0;
 
+vis_sample_format_t host_pcm_format(void)
+{
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+    return PCM_FORMAT_S16_BE;
+#else
+    return PCM_FORMAT_S16_LE;
+#endif
+}
+
 // Allocate pthread_t struct, and creates a thread
 // Returns  pointer to pthread_t or  NULL if memory allocation or thread creation failed
 pthread_t* create_thread(const pthread_attr_t*  attr,

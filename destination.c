@@ -25,6 +25,9 @@
  ****************************************************************/
 #include "vismux.h"
 
+// Swap the two bytes of one 16-bit PCM sample (wire order <-> host order).
+#define SWAP_S16(v) ((int16_t)__builtin_bswap16((uint16_t)(v)))
+
 static void release_system_resources(destination_context_t* ctxt)
 {
     if (ctxt->shm_ptr != MAP_FAILED)
@@ -294,7 +297,7 @@ void run_destination(destination_task_t* task)
         // Header fields are network byte order on the wire. Keep host-order
         // copies so the rest of this function never compares raw byte order.
         uint32_t sequence = ntohl(msg->sequence);
-        uint32_t payload_len = ntohl(msg->payload_len);
+        uint16_t payload_len = ntohs(msg->payload_len);
         size_t wire_headers_sz = sizeof(vis_wire_hdr_t);
 
         if (msg->type == PACKET_SUB_ACK)
@@ -397,14 +400,19 @@ void run_destination(destination_task_t* task)
             uint32_t new_buf_size = ntohl(wirehdr->buf_size);
             uint32_t new_buf_index = ntohl(wirehdr->buf_index);
             uint32_t new_rate = ntohl(wirehdr->rate);
+            vis_sample_format_t wire_format = (vis_sample_format_t)wirehdr->format;
 
             // Reject malformed headers before they reach the shared buffer.
             if (new_buf_size == 0 || new_buf_size > VIS_BUF_SIZE ||
-                new_buf_index >= VIS_BUF_SIZE || new_rate == 0)
+                new_buf_index >= VIS_BUF_SIZE || new_rate == 0 ||
+                (wire_format != PCM_FORMAT_S16_LE && wire_format != PCM_FORMAT_S16_BE))
             {
                 total_dropped_frames++;
                 continue;
             }
+            // The source sends samples in its own byte order; convert when it
+            // differs from ours.
+            bool swap_samples = (wire_format != host_pcm_format());
 
             pthread_rwlock_wrlock(&ctxt.shm_ptr->rwlock);
             // Use this packet's new head, not the stale local buf_index, as the anchor.
@@ -412,8 +420,19 @@ void run_destination(destination_task_t* task)
             size_t received_audio_bytes = payload_len - wire_headers_sz;
             if (received_audio_bytes == sizeof(ctxt.shm_ptr->buffer))
             {
-                // Full frames replace the whole ring, so no placement calculation is needed.
-                memcpy(ctxt.shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
+                if (swap_samples)
+                {
+                    uint32_t incoming_samples = received_audio_bytes / sizeof(int16_t);
+                    for (uint32_t i = 0; i < incoming_samples; i++)
+                    {
+                        ctxt.shm_ptr->buffer[i] = SWAP_S16(((int16_t *)incoming_audio_payload)[i]);
+                    }
+                }
+                else
+                {
+                    // Full frames replace the whole ring, so no placement calculation is needed.
+                    memcpy(ctxt.shm_ptr->buffer, incoming_audio_payload, received_audio_bytes);
+                }
             }
             else
             {
@@ -425,13 +444,18 @@ void run_destination(destination_task_t* task)
                     // it would move the delta back one packet. The extra
                     // VIS_BUF_SIZE keeps the index positive when it wraps past zero.
                     uint32_t target_idx = (new_buf_index - incoming_samples + i + VIS_BUF_SIZE) % VIS_BUF_SIZE;
-                    ctxt.shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
+
+                    if (swap_samples) {
+                        ctxt.shm_ptr->buffer[target_idx] = SWAP_S16(((int16_t *)incoming_audio_payload)[i]);
+                    } else {
+                        ctxt.shm_ptr->buffer[target_idx] = ((int16_t *)incoming_audio_payload)[i];
+                    }
                 }
             }
 
             ctxt.shm_ptr->buf_size = new_buf_size;
             ctxt.shm_ptr->buf_index = new_buf_index;
-            ctxt.shm_ptr->running = (bool)ntohl(wirehdr->running);
+            ctxt.shm_ptr->running = (bool)wirehdr->running;
             ctxt.shm_ptr->rate = new_rate;
             ctxt.shm_ptr->updated = (uint64_t)time(NULL);
 
