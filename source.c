@@ -145,7 +145,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
                         .protocol_version = incoming_hdr.protocol_version,
                         .type = PACKET_SUB_ACK,
                         .sequence = 0,
-                        .payload_len = sizeof(response_payload)};
+                        .payload_len = htonl((uint32_t)sizeof(response_payload))};
                     char response_buf[sizeof(msg_hdr_t) + sizeof(response_payload)];
                     memcpy(response_buf, &response_hdr, sizeof(response_hdr));
                     memcpy(response_buf + sizeof(response_hdr), &response_payload, sizeof(response_payload));
@@ -235,7 +235,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
                 if (send_packet)
                 {
                     size_t total_payload_len = wire_headers_sz + payload_audio_bytes;
-                    msg_hdr_t out_hdr = {.protocol_version = clients[i].proto_version, .type = PACKET_DATA, .sequence = seq_counter++, .payload_len = total_payload_len};
+                    msg_hdr_t out_hdr = {.protocol_version = clients[i].proto_version, .type = PACKET_DATA, .sequence = htonl(seq_counter++), .payload_len = htonl((uint32_t)total_payload_len)};
                     memcpy(net_buf, &out_hdr, sizeof(msg_hdr_t));
 
                     memcpy(net_buf + sizeof(msg_hdr_t), &current_hdr, wire_headers_sz);
