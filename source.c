@@ -145,7 +145,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
                         .protocol_version = incoming_hdr.protocol_version,
                         .type = PACKET_SUB_ACK,
                         .sequence = 0,
-                        .payload_len = htonl((uint32_t)sizeof(response_payload))};
+                        .payload_len = htons((uint16_t)sizeof(response_payload))};
                     char response_buf[sizeof(msg_hdr_t) + sizeof(response_payload)];
                     memcpy(response_buf, &response_hdr, sizeof(response_hdr));
                     memcpy(response_buf + sizeof(response_hdr), &response_payload, sizeof(response_payload));
@@ -179,15 +179,16 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
         }
         if (has_active_clients)
         {
-            vis_wire_hdr_t current_hdr;
+            vis_wire_hdr_t current_hdr = {0};
             int16_t current_buffer[VIS_BUF_SIZE];
             pthread_rwlock_rdlock(&ctxt.shm_ptr->rwlock);
             current_hdr.buf_size = htonl(ctxt.shm_ptr->buf_size);
             current_hdr.buf_index = htonl(ctxt.shm_ptr->buf_index);
             uint32_t current_idx = ctxt.shm_ptr->buf_index;
-            current_hdr.running = htonl((int)ctxt.shm_ptr->running);
+            current_hdr.running = (uint8_t)ctxt.shm_ptr->running;
             bool current_running = (int)ctxt.shm_ptr->running;
             current_hdr.rate = htonl(ctxt.shm_ptr->rate);
+            current_hdr.format = (uint8_t)host_pcm_format();
             memcpy(current_buffer, ctxt.shm_ptr->buffer, sizeof(current_buffer));
             time_t current_update_time = ctxt.shm_ptr->updated;
             pthread_rwlock_unlock(&ctxt.shm_ptr->rwlock);
@@ -235,7 +236,7 @@ void run_source(const char* _shm_path, const char* mac, bool discoverable)
                 if (send_packet)
                 {
                     size_t total_payload_len = wire_headers_sz + payload_audio_bytes;
-                    msg_hdr_t out_hdr = {.protocol_version = clients[i].proto_version, .type = PACKET_DATA, .sequence = htonl(seq_counter++), .payload_len = htonl((uint32_t)total_payload_len)};
+                    msg_hdr_t out_hdr = {.protocol_version = clients[i].proto_version, .type = PACKET_DATA, .sequence = htonl(seq_counter++), .payload_len = htons((uint16_t)total_payload_len)};
                     memcpy(net_buf, &out_hdr, sizeof(msg_hdr_t));
 
                     memcpy(net_buf + sizeof(msg_hdr_t), &current_hdr, wire_headers_sz);
