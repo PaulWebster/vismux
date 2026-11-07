@@ -84,12 +84,25 @@
 #define SQUEEZELITE_SHM_PREFIX "squeezelite-"
 #define SQUEEZELITE_SHM_PREFIX_LEN (sizeof(SQUEEZELITE_SHM_PREFIX) - 1)
 
+// Sample encoding and byte order of the audio payload in a PACKET_DATA packet.
+// PCM formats are listed first; DSD formats can be added here later.
+typedef enum
+{
+    PCM_FORMAT_S16_LE = 0, // little-endian signed 16-bit PCM
+    PCM_FORMAT_S16_BE = 1  // big-endian signed 16-bit PCM
+} vis_sample_format_t;
+
+// PACKET_DATA wire header. Packed, 16 bytes on the wire; all multi-byte fields
+// are in network byte order:
+// buf_size(4) + buf_index(4) + rate(4) + running(1) + format(1) + unused(2).
 typedef struct
 {
-    uint32_t buf_size;
-    uint32_t buf_index;
-    uint32_t running;
-    uint32_t rate;
+    uint32_t buf_size;  // Number of int16 samples in the audio buffer (typically 16384).
+    uint32_t buf_index; // Source write position at capture time (0..buf_size-1).
+    uint32_t rate;      // Sample rate in Hz.
+    uint8_t running;    // 1 when the source is producing samples, otherwise 0.
+    uint8_t format;     // vis_sample_format_t; encoding/byte order of the audio payload.
+    uint16_t unused;    // Reserved (sent as 0); pads the header to 16 bytes.
 } __attribute__((packed)) vis_wire_hdr_t;
 
 typedef struct
@@ -115,12 +128,17 @@ typedef struct
     bool active;
 } destination_t;
 
+// Common header for every packet. Packed, 16 bytes on the wire; all multi-byte
+// fields are in network byte order:
+// protocol_version(1) + type(1) + payload_len(2) + sequence(4) + unused1(4) + unused2(4).
 typedef struct
 {
-    uint8_t protocol_version;
-    uint8_t type;
-    uint32_t sequence;
-    uint32_t payload_len;
+    uint8_t protocol_version; // Protocol version.
+    uint8_t type;             // PACKET_DATA / PACKET_REQ / PACKET_ACK / PACKET_SUB_ACK.
+    uint16_t payload_len;     // Bytes following this header.
+    uint32_t sequence;        // DATA/ACK sequence number.
+    uint32_t unused1;         // Reserved (sent as 0).
+    uint32_t unused2;         // Reserved (sent as 0); pads the header to 16 bytes.
 } __attribute__((packed)) msg_hdr_t;
 
 typedef struct
@@ -223,6 +241,9 @@ typedef struct {
 
 bool validate_and_format_mac(const char *mac_in, char *shm_out, size_t out_len);
 bool validate_mac_spec(const char *mac_in);
+
+// Byte order used by the int16_t PCM samples this host produces in shared memory.
+vis_sample_format_t host_pcm_format(void);
 
 void log_msg(int level, const char *fmt, ...);
 void handle_signal(int sig);
