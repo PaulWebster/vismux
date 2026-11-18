@@ -387,6 +387,7 @@ int main(int argc, char *argv[])
             printf("  Press 'v'         Version - Display application version details\n");
             printf("  Press 'q'         Quit - Request shutdown\n");
             printf("  Press 'l' or 'L'  Log Level - Cycle log levels dynamically: 'l' to increment 'L' to decrement\n");
+            printf("  Press 'i' or 'I'  Interval for stats - change stats interval dynamically: 'i' to double 'I' to half\n");
 			printf("  Press 's'         Stats - Request stats summary on next data reception\n");
 #endif
             return 0;

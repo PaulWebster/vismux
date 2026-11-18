@@ -83,6 +83,34 @@ void *console_listener_thread(void *arg)
                 {	// Request stats now
 					atomic_store(&force_stats_log, 1);
                 }
+                else if (ch == 'i' || ch == 'I')
+                {
+                    int local_stats_int = atomic_load(&stats_int);
+                    const int MAX_INTERVAL = 24 * 60 * 60; // 86400 seconds (1 day)
+					if (ch == 'i') 
+                    {
+                        // Check for overflow before multiplying
+                        if (local_stats_int > MAX_INTERVAL / 2) {
+                            local_stats_int = DEFAULT_STATS_INTERVAL;
+                        } else {
+                            local_stats_int *= 2; // Multiply by 2 safely
+                        }
+                    } 
+                    else 
+                    {
+                        local_stats_int /= 2; // Divide by 2 (and round down)
+                        
+                        if (local_stats_int < 1) {
+                            local_stats_int = MAX_INTERVAL; 
+                        }
+                    }
+
+					if (local_stats_int > 24*60*60 || local_stats_int < 0) {
+						local_stats_int = DEFAULT_STATS_INTERVAL;
+					}
+					atomic_store(&stats_int, local_stats_int);
+                    log_msg(-1, "Interval for stats now: %d secs", stats_int);
+                }
                 else if (ch == 'v' || ch == 'V')
                 {
                     log_msg(-1, "Application Version: %s", APP_VERSION);
