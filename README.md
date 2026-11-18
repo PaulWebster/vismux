@@ -146,6 +146,7 @@ pcp br
 - Press `v`             Version - Display application version details
 - Press `q`             Quit - Request shutdown
 - Press `l` or `L`      Log Level - Cycle log levels dynamically: 'l' to increment 'L' to decrement
+- Press `i` or `I`      Interval for stats - change stats interval dynamically: 'i' to double 'I' to half
 - Press `s`             Stats - Request stats summary on next data reception
 
 ## Service Discovery Mode
